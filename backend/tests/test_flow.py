@@ -37,28 +37,52 @@ def select(client, items):
 
 # ---------- login ----------
 
-def test_login_list_and_faculty_login_without_pin(client, db):
-    users = client.get("/api/auth/users").json()
-    assert users[0]["role"] == "dean" and users[0]["needs_pin"] is True
-    assert not next(u for u in users if u["name"] == "أستاذ أ")["needs_pin"]
-    login(client, db, "أستاذ أ")
-    me = client.get("/api/auth/me").json()
-    assert me["name"] == "أستاذ أ" and me["needs_course_selection"] is True
+def test_first_visit_sets_password_then_email_and_password(client, db):
+    found = client.post("/api/auth/lookup", json={"email": " A@BU.edu.sa "}).json()
+    assert found == {"signed_in": False, "name": "أستاذ أ", "role_ar": "عضو هيئة تدريس", "needs_setup": True, "can_self_setup": True}
+    assert client.post("/api/auth/setup", json={"email": "a@bu.edu.sa", "password": "short"}).status_code == 422
+    assert client.post("/api/auth/setup", json={"email": "a@bu.edu.sa", "password": "my-pass-123"}).status_code == 200
+    assert client.get("/api/auth/me").json()["needs_course_selection"] is True
+    # The password is kept: setup cannot run again, and the next visit is email + password.
+    client.cookies.clear()
+    assert client.post("/api/auth/setup", json={"email": "a@bu.edu.sa", "password": "other-pass-1"}).status_code == 409
+    assert client.post("/api/auth/lookup", json={"email": "a@bu.edu.sa"}).json()["needs_setup"] is False
+    assert client.post("/api/auth/login", json={"email": "a@bu.edu.sa", "password": "wrong-pass"}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": "a@bu.edu.sa", "password": "my-pass-123"}).status_code == 200
 
 
-def test_dean_pin_required_and_lockout(client, db):
-    dean = db.query(User).filter_by(name="العميد").one()
-    assert client.post("/api/auth/login", json={"user_id": dean.id}).status_code == 401
-    for _ in range(3):
-        assert client.post("/api/auth/login", json={"user_id": dean.id, "pin": "000000"}).status_code == 401
-    assert client.post("/api/auth/login", json={"user_id": dean.id, "pin": "000000"}).status_code == 423
-    # Locked even with the right PIN until the lock expires.
-    assert client.post("/api/auth/login", json={"user_id": dean.id, "pin": "123456"}).status_code == 423
+def test_unknown_email_and_no_login_list(client, db):
+    assert client.post("/api/auth/lookup", json={"email": "nobody@bu.edu.sa"}).status_code == 404
+    assert client.get("/api/auth/users").status_code == 404
 
 
-def test_dean_correct_pin(client, db):
+def test_dean_password_cannot_be_self_set_and_lockout(client, db):
+    from app.models import User as U
+    dean = db.query(U).filter_by(name="العميد").one()
+    dean.pin_hash = None
+    db.commit()
+    assert client.post("/api/auth/lookup", json={"email": "dean@bu.edu.sa"}).json()["can_self_setup"] is False
+    assert client.post("/api/auth/setup", json={"email": "dean@bu.edu.sa", "password": "taken-over-1"}).status_code == 403
+    from app.security import hash_pin
+    dean.pin_hash = hash_pin("123456")
+    db.commit()
+    for _ in range(4):
+        assert client.post("/api/auth/login", json={"email": "dean@bu.edu.sa", "password": "000000"}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": "dean@bu.edu.sa", "password": "000000"}).status_code == 423
+    assert client.post("/api/auth/login", json={"email": "dean@bu.edu.sa", "password": "123456"}).status_code == 423
+
+
+def test_dean_correct_password(client, db):
     login(client, db, "العميد", "123456")
     assert client.get("/api/auth/me").json()["role"] == "dean"
+
+
+def test_team_resets_a_password(client, db):
+    login(client, db, "أستاذ أ")
+    uid = client.get("/api/auth/me").json()["id"]
+    login(client, db, "فريق", "team-pass-1")
+    assert client.post(f"/api/users/{uid}/reset-password").status_code == 200
+    assert client.post("/api/auth/lookup", json={"email": "a@bu.edu.sa"}).json()["needs_setup"] is True
 
 
 # ---------- course selection ----------
@@ -86,13 +110,15 @@ def test_empty_selection_counts_as_answered_and_head_is_not_forced(client, db):
 def test_register_request_needs_head_approval(client, db):
     from app.models import Department
     cs = db.query(Department).filter_by(program_code="CS").one()
-    assert client.post("/api/auth/register-request", json={"name": "د. عضو جديد للتجربة", "department_id": cs.id}).status_code == 200
-    assert "د. عضو جديد للتجربة" not in [u["name"] for u in client.get("/api/auth/users").json()]
+    body = {"name": "د. عضو جديد للتجربة", "email": "new@bu.edu.sa", "department_id": cs.id}
+    assert client.post("/api/auth/register-request", json={**body, "email": "new@gmail.com"}).status_code == 422
+    assert client.post("/api/auth/register-request", json=body).status_code == 200
+    assert client.post("/api/auth/lookup", json={"email": "new@bu.edu.sa"}).status_code == 404
     login(client, db, "رئيس CS")
     pending = client.get("/api/programs/CS/distribution").json()["pending_users"]
     assert pending[0]["name"] == "د. عضو جديد للتجربة"
     assert client.post(f"/api/users/{pending[0]['id']}/approve").status_code == 200
-    assert "د. عضو جديد للتجربة" in [u["name"] for u in client.get("/api/auth/users").json()]
+    assert client.post("/api/auth/lookup", json={"email": "new@bu.edu.sa"}).json()["name"] == "د. عضو جديد للتجربة"
 
 
 # ---------- upload & classification ----------
@@ -162,7 +188,7 @@ def test_low_confidence_goes_to_team_and_team_resolves(client, db):
     login(client, db, "أستاذ أ")
     select(client, [{"course_id": c.id, "is_coordinator": True}])
     (doc_id,) = upload(client, c.id, "file1.docx", docx_bytes("some notes"))
-    login(client, db, "فريق")
+    login(client, db, "فريق", "team-pass-1")
     queue = client.get("/api/review").json()
     assert queue[0]["id"] == doc_id
     assert client.post(f"/api/documents/{doc_id}/review", json={"component": "theory"}).status_code == 200
@@ -224,7 +250,7 @@ def test_dashboard_and_activity_scoping(client, db):
 # ---------- sandbox testers ----------
 
 def test_tester_hidden_login_and_full_isolation(client, db):
-    db.add(User(name="مختبر", role="faculty", is_tester=True, in_pilot=True, login_alias="taif"))
+    db.add(User(name="مختبر", role="faculty", is_tester=True, in_pilot=True, email="111@stu.bu.edu.sa"))
     db.commit()
     c = course(db, "CS1004")
     # A real member uploads first; the tester must never see this file.
@@ -233,11 +259,8 @@ def test_tester_hidden_login_and_full_isolation(client, db):
     (real_doc,) = upload(client, c.id, "spec.docx", docx_bytes("Course Specifications\nCourse Learning Outcomes"))
 
     client.cookies.clear()
-    assert "مختبر" not in [u["name"] for u in client.get("/api/auth/users").json()]
-    tester_id = db.query(User).filter_by(name="مختبر").one().id
-    assert client.post("/api/auth/login", json={"user_id": tester_id}).status_code == 404
-    assert client.post("/api/auth/alias", json={"word": "nobody"}).status_code == 404
-    assert client.post("/api/auth/alias", json={"word": " Taif "}).status_code == 200
+    # The tester's email signs in straight away, no password.
+    assert client.post("/api/auth/lookup", json={"email": "111@STU.bu.edu.sa"}).json() == {"signed_in": True}
     assert client.get("/api/auth/me").json()["is_tester"] is True
 
     select(client, [{"course_id": c.id, "is_coordinator": True}])

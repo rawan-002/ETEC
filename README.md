@@ -3,7 +3,7 @@
 متابعة اكتمال ملفات المقررات لكلية الحاسبات والمعلومات بجامعة الباحة. التجربة الأولى: قسم علوم الحاسب (59 مقررًا، 24 مستخدمًا).
 
 ## ما تقدمه المرحلة 1
-- **الدخول:** اختيار الاسم من قائمة، ورمز من 6 أرقام للعميد فقط (قفل 15 دقيقة بعد 5 محاولات خاطئة).
+- **الدخول:** البريد الجامعي ثم يظهر الاسم تلقائيًا؛ أول دخول يختار العضو كلمة مرور، وبعدها البريد وكلمة المرور (قفل 15 دقيقة بعد 5 محاولات خاطئة). كلمة مرور العميد يعيّنها المسؤول فقط.
 - **اختيار المقررات:** يختار الأستاذ مقرراته في أول دخول كل فصل، مع خيار «أنا منسق المقرر»؛ ويعتمد رئيس القسم التوزيع.
 - **الرفع:** ملفات أو مجلد كامل بصيغة ZIP. فحص النوع الحقيقي للملف، وكشف الملفات الفارغة والمكررة، وحفظ كل الإصدارات.
 - **الفرز التلقائي:** توصيف / نظري / عملي / تقييم من الاسم والمجلد والمحتوى. ما لا يُحسم بثقة يذهب لفريق المشروع.
@@ -17,8 +17,8 @@
 cd backend
 python -m venv .venv && .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\python -m app.cli init "<مسار>\المستخدمون_وتوزيع_المقررات_v3.xlsx"
-.venv\Scripts\python -m app.cli set-pin "نزار حسن محمد الشريف"
-.venv\Scripts\python -m app.cli add-tester "<الاسم>" <كلمة الدخول>   # حساب تجريبي معزول، يدخل بكتابة الكلمة في خانة البحث
+.venv\Scripts\python -m app.cli set-password "نزار حسن محمد الشريف"
+.venv\Scripts\python -m app.cli add-tester "<الاسم>" <البريد>   # حساب تجريبي معزول، يدخل مباشرة بإدخال بريده
 .venv\Scripts\python -m uvicorn app.main:app --port 8000
 
 # الواجهة (نافذة أخرى)
@@ -34,7 +34,7 @@ npm install && npm run build && npx next start -p 3000
 cp .env.example .env   # عبّئ كلمات المرور والمفتاح السري
 docker compose up -d --build
 docker compose exec backend python -m app.cli init /path/to/users.xlsx
-docker compose exec backend python -m app.cli set-pin "نزار حسن محمد الشريف"
+docker compose exec backend python -m app.cli set-password "نزار حسن محمد الشريف"
 ```
 
 ## الاختبارات

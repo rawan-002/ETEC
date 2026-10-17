@@ -1,8 +1,8 @@
 """Admin commands:
   python -m app.cli init <users.xlsx>      create tables, load the CS plan, departments, term and users
-  python -m app.cli set-pin "<name>"       set a 6-digit PIN (prompted, not echoed)
+  python -m app.cli set-password "<name>"  set a sign-in password (prompted, not echoed); needed for the dean
   python -m app.cli add-team "<name>"      add a project-team member to the pilot
-  python -m app.cli add-tester "<name>" <word> [email]   sandboxed tester, signed in by typing <word> on the login page
+  python -m app.cli add-tester "<name>" <email>   sandboxed tester; entering this email signs in directly
   python -m app.cli remind                 run the reminder job once
 """
 import getpass
@@ -31,15 +31,15 @@ def main(argv: list[str]) -> None:
             print("active term:", seed_term(db).code)
             if args:
                 print("users:", import_users_workbook(db, args[0]))
-        elif cmd == "set-pin":
+        elif cmd == "set-password":
             user = db.scalar(select(User).where(User.name == args[0]))
             if not user:
                 sys.exit(f"no user named {args[0]!r}")
-            pin = getpass.getpass("PIN (6 digits): ")
-            if not (pin.isdigit() and len(pin) == 6) or pin != getpass.getpass("Repeat: "):
-                sys.exit("PIN must be the same 6 digits twice")
-            user.pin_hash, user.failed_pin_attempts, user.locked_until = hash_pin(pin), 0, None
-            print("PIN set for", user.name)
+            pw = getpass.getpass("Password (8+ characters): ")
+            if len(pw) < 8 or pw != getpass.getpass("Repeat: "):
+                sys.exit("password must be 8+ characters, the same twice")
+            user.pin_hash, user.failed_pin_attempts, user.locked_until = hash_pin(pw), 0, None
+            print("password set for", user.name)
         elif cmd == "add-team":
             user = db.scalar(select(User).where(User.name == args[0])) or User(name=args[0])
             user.role, user.in_pilot, user.active = TEAM, True, True
@@ -48,8 +48,7 @@ def main(argv: list[str]) -> None:
         elif cmd == "add-tester":
             user = db.scalar(select(User).where(User.name == args[0])) or User(name=args[0])
             user.role, user.is_tester, user.in_pilot, user.active = FACULTY, True, True, True
-            user.login_alias = args[1].strip().lower()
-            user.email = args[2] if len(args) > 2 else user.email
+            user.email = args[1].strip().lower()
             user.pin_hash = None
             db.add(user)
             print("tester:", user.name)

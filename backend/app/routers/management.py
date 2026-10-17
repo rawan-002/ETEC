@@ -243,10 +243,24 @@ def activity_log(kind: str | None = None, user: User = Depends(current_user), db
 @router.get("/users")
 def users(user: User = Depends(require(DEAN, TEAM)), db: Session = Depends(get_db)):
     return [{"id": u.id, "name": u.name, "email": u.email, "email_confirmed": u.email_confirmed, "role": u.role,
-             "is_tester": u.is_tester,
+             "is_tester": u.is_tester, "has_password": u.pin_hash is not None,
              "department": u.department.name if u.department else None, "in_pilot": u.in_pilot,
              "pending": u.pending_approval, "active": u.active}
             for u in db.scalars(select(User).order_by(User.in_pilot.desc(), User.name))]
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_password(user_id: int, user: User = Depends(require(DEAN, TEAM)), db: Session = Depends(get_db)):
+    """Clears a member's password so they choose a new one at their next sign-in."""
+    u = db.get(User, user_id)
+    if not u or u.is_tester:
+        raise HTTPException(404, "غير موجود")
+    if u.role == DEAN:
+        raise HTTPException(403, "كلمة مرور العميد تُعيَّن من سطر الأوامر")
+    u.pin_hash, u.failed_pin_attempts, u.locked_until = None, 0, None
+    activity.log(db, "admin", f"أعاد {user.name} تعيين كلمة مرور {u.name}", user.id)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/admin/import-users")

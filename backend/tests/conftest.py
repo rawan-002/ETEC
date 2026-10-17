@@ -35,7 +35,7 @@ def db():
         User(name="رئيس SE", role=HEAD, in_pilot=True, department=se, email="sehead@bu.edu.sa"),
         User(name="أستاذ أ", role=FACULTY, in_pilot=True, department=cs, email="a@bu.edu.sa"),
         User(name="أستاذ ب", role=FACULTY, in_pilot=True, department=cs, email="b@bu.edu.sa"),
-        User(name="فريق", role=TEAM, in_pilot=True),
+        User(name="فريق", role=TEAM, in_pilot=True, email="team@bu.edu.sa", pin_hash=hash_pin("team-pass-1")),
     ])
     s.commit()
     yield s
@@ -47,8 +47,20 @@ def client(db):
     return TestClient(app)
 
 
-def login(client, db, name, pin=None):
-    uid = db.query(User).filter_by(name=name).one().id
-    r = client.post("/api/auth/login", json={"user_id": uid, "pin": pin})
+DEFAULT_PASSWORD = "test-pass-123"
+
+
+def login(client, db, name, password=None):
+    """Sign in by email; a member without a password chooses one first (as on a first visit)."""
+    client.cookies.clear()
+    email = db.query(User).filter_by(name=name).one().email
+    found = client.post("/api/auth/lookup", json={"email": email})
+    assert found.status_code == 200, found.text
+    if found.json()["signed_in"]:
+        return client
+    if found.json()["needs_setup"]:
+        r = client.post("/api/auth/setup", json={"email": email, "password": password or DEFAULT_PASSWORD})
+    else:
+        r = client.post("/api/auth/login", json={"email": email, "password": password or DEFAULT_PASSWORD})
     assert r.status_code == 200, r.text
     return client

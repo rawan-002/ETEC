@@ -46,12 +46,10 @@ class User(Base):
     # Project-team testers act as faculty, but everything they do is sandboxed: invisible to others
     # and never counted in completeness, distribution or reminders.
     is_tester: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Testers are not in the login list; typing this word in the search box signs them in.
-    login_alias: Mapped[str | None] = mapped_column(String(40), unique=True)
     # Self-registered users ("اسمي غير موجود") wait for the department head.
     pending_approval: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    pin_hash: Mapped[str | None] = mapped_column(String(200))
+    pin_hash: Mapped[str | None] = mapped_column(String(200))  # scrypt hash of the sign-in password
     failed_pin_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

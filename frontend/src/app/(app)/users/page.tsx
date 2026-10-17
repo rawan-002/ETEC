@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { ErrorNote, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 
-interface U { id: number; name: string; is_tester: boolean; email: string | null; email_confirmed: boolean; role: string; department: string | null; in_pilot: boolean; pending: boolean; active: boolean }
+interface U { id: number; name: string; is_tester: boolean; has_password: boolean; email: string | null; email_confirmed: boolean; role: string; department: string | null; in_pilot: boolean; pending: boolean; active: boolean }
 const ROLE_AR: Record<string, string> = { dean: "عميد الكلية", head: "رئيس قسم", faculty: "عضو هيئة تدريس", team: "فريق المشروع" };
 
 export default function UsersPage() {
@@ -16,6 +16,15 @@ export default function UsersPage() {
   const file = useRef<HTMLInputElement>(null);
   const rows = useMemo(() => (data ?? []).filter((u) => (!pilotOnly || u.in_pilot) && u.name.includes(q.trim())), [data, q, pilotOnly]);
   if (!data) return <Spinner />;
+
+  const resetPassword = async (u: U) => {
+    setError(null);
+    try {
+      await api(`/api/users/${u.id}/reset-password`, { method: "POST" });
+      setMsg(`أُعيد تعيين كلمة مرور ${u.name}؛ يختار كلمة جديدة عند دخوله القادم`);
+      reload();
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذّر التنفيذ"); }
+  };
 
   const importFile = async (f: File | undefined) => {
     if (!f) return;
@@ -46,9 +55,9 @@ export default function UsersPage() {
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-royal" checked={pilotOnly} onChange={(e) => setPilotOnly(e.target.checked)} />مجموعة التجربة فقط</label>
       </div>
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-canvas text-xs text-ink-soft">
-            <tr><th className="p-3 text-right">الاسم</th><th className="p-3 text-right">الدور</th><th className="p-3 text-right">القسم</th><th className="p-3 text-right">البريد</th><th className="p-3">الحالة</th></tr>
+            <tr><th className="p-3 text-right">الاسم</th><th className="p-3 text-right">الدور</th><th className="p-3 text-right">القسم</th><th className="p-3 text-right">البريد</th><th className="p-3">الحالة</th><th className="p-3">كلمة المرور</th></tr>
           </thead>
           <tbody className="divide-y divide-line">
             {rows.map((u) => (
@@ -58,6 +67,11 @@ export default function UsersPage() {
                 <td className="p-3 text-ink-soft">{u.department ?? "—"}</td>
                 <td className="p-3"><span className="ltr">{u.email ?? "—"}</span>{u.email && !u.email_confirmed && <span className="mr-2 text-xs text-amber-700">غير مؤكد</span>}</td>
                 <td className="p-3 text-center text-xs">{u.pending ? "بانتظار رئيس القسم" : !u.active ? "معطّل" : u.in_pilot ? "في التجربة" : "—"}</td>
+                <td className="p-3 text-center text-xs">
+                  {u.is_tester ? "—" : u.has_password ? (
+                    u.role === "dean" ? "معيّنة" : <button className="text-royal hover:underline" onClick={() => resetPassword(u)}>إعادة تعيين</button>
+                  ) : <span className="text-ink-faint">لم تُعيَّن بعد</span>}
+                </td>
               </tr>
             ))}
           </tbody>
