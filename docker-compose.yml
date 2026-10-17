@@ -1,0 +1,50 @@
+# Server deployment: one machine, all services. Copy .env.example to .env and fill the secrets first.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aq
+      POSTGRES_USER: aq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:?set in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?set in .env}
+    volumes: [files:/data]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on: [db, minio]
+    environment: &backend_env
+      AQ_DATABASE_URL: postgresql+psycopg://aq:${POSTGRES_PASSWORD}@db:5432/aq
+      AQ_SECRET_KEY: ${AQ_SECRET_KEY:?set in .env}
+      AQ_STORAGE_BACKEND: s3
+      AQ_S3_ENDPOINT: http://minio:9000
+      AQ_S3_BUCKET: aq-documents
+      AQ_S3_ACCESS_KEY: ${MINIO_USER}
+      AQ_S3_SECRET_KEY: ${MINIO_PASSWORD}
+      AQ_SMTP_HOST: ${SMTP_HOST:-}
+      AQ_SMTP_PORT: ${SMTP_PORT:-587}
+      AQ_SMTP_USER: ${SMTP_USER:-}
+      AQ_SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      AQ_SMTP_FROM: ${SMTP_FROM:-quality-platform@bu.edu.sa}
+      AQ_FRONTEND_ORIGIN: ${PUBLIC_URL:-http://localhost}
+
+  frontend:
+    build:
+      context: ./frontend
+      args: { BACKEND_URL: "http://backend:8000" }
+    restart: unless-stopped
+    depends_on: [backend]
+    ports: ["80:3000"]
+
+volumes:
+  pgdata:
+  files:
