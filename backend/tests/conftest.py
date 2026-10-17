@@ -9,6 +9,8 @@ os.environ["AQ_LOCAL_STORAGE_DIR"] = str(Path(_tmp) / "files")
 os.environ["AQ_TASKS_INLINE"] = "1"
 # Never send real email from tests, whatever backend/.env contains.
 os.environ["AQ_SMTP_HOST"] = ""
+# Never call the Claude API from tests; AI behaviour is tested with a stub.
+os.environ["ANTHROPIC_API_KEY"] = ""
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402

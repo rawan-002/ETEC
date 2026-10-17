@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,6 +47,12 @@ class Settings(BaseSettings):
     reminder_loop_minutes: int = 60
 
     frontend_origin: str = "http://localhost:3000"
+
+    # Claude second opinion for files the rules cannot settle. Read from ANTHROPIC_API_KEY.
+    anthropic_api_key: str = Field(default="", validation_alias=AliasChoices("ANTHROPIC_API_KEY", "AQ_ANTHROPIC_API_KEY"))
+    ai_enabled: bool = True
+    ai_model: str = "claude-opus-5-5"
+    ai_accept_confidence: float = 0.7
 
 
 settings = Settings()

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import SessionLocal
 from ..models import OTHER, SPEC, Course, Document, Finding, User
-from . import activity
+from . import activity, ai_classify
 from .classify import classify
 from .extract import ExtractionError, detect_type, expand_zip, extract_text
 from .storage import make_key, storage
@@ -111,6 +111,9 @@ def _process(db: Session, doc: Document, component_hint: str | None) -> None:
     doc.classified_by = "rules"
     doc.status = "classified" if doc.confidence >= settings.review_threshold and doc.component != OTHER else "needs_review"
 
+    if doc.status == "needs_review" and ai_classify.enabled():
+        _ai_second_opinion(doc, path, text, data, kind)
+
     course = doc.course
     if doc.component == SPEC and result.codes_in_text and course.code:
         if course.code not in result.codes_in_text:
@@ -119,8 +122,27 @@ def _process(db: Session, doc: Document, component_hint: str | None) -> None:
 
     activity.log(db, "classify",
                  f"صُنّف «{doc.filename}» كـ{COMPONENT_AR[doc.component]} (ثقة {int(doc.confidence * 100)}%)"
+                 + (" بالتحليل الذكي" if doc.classified_by == "ai" else "")
                  + (" — أُحيل لفريق المشروع" if doc.status == "needs_review" else ""),
                  doc.uploaded_by if doc.sandbox else None, course.program, course.id, doc.sandbox)
+
+
+def _ai_second_opinion(doc: Document, path: str, text: str, data: bytes, kind: str) -> None:
+    course = doc.course
+    ai, usage, error = ai_classify.classify_with_ai(course=f"{course.display_code} {course.title}", path=path,
+                                                    text=text, data=data, kind=kind)
+    doc.ai_input_tokens += usage.input_tokens
+    doc.ai_output_tokens += usage.output_tokens
+    if ai is None:
+        doc.reason = f"{doc.reason}؛ {error}" if doc.reason else error
+        return
+    if ai.component != OTHER and ai.confidence >= settings.ai_accept_confidence:
+        doc.component, doc.confidence, doc.classified_by, doc.status = ai.component, round(ai.confidence, 2), "ai", "classified"
+        doc.reason = f"التحليل الذكي: {ai.reason_ar}"
+    else:
+        # Not sure enough: the team decides, with the model's suggestion shown.
+        doc.component = ai.component if ai.component != OTHER else doc.component
+        doc.reason = f"ترجيح التحليل الذكي ({int(ai.confidence * 100)}%): {ai.reason_ar}"
 
 
 def _finding(db: Session, doc: Document, kind: str, message: str) -> None:

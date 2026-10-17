@@ -296,3 +296,29 @@ def test_change_password(client, db):
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"email": "a@example.invalid", "password": "first-pass-1"}).status_code == 401
     assert client.post("/api/auth/login", json={"email": "a@example.invalid", "password": "second-pass-2"}).status_code == 200
+
+
+# ---------- AI second opinion ----------
+
+def test_ai_second_opinion_only_for_unsettled_files(client, db, monkeypatch):
+    from app.config import settings
+    from app.services import ai_classify
+    calls = []
+
+    def fake(**kw):
+        calls.append(kw["path"])
+        return (ai_classify.AIResult(component="assessment", confidence=0.9, reason_ar="نموذج اختبار نهائي"),
+                ai_classify.AIUsage(input_tokens=1200, output_tokens=40), None)
+
+    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
+    monkeypatch.setattr(ai_classify, "classify_with_ai", fake)
+    c = course(db, "CS1004")
+    login(client, db, "أستاذ أ")
+    select(client, [{"course_id": c.id, "is_coordinator": True}])
+    upload(client, c.id, "Lecture 1.pptx", pptx_bytes("Lecture 1"))           # rules settle it: no AI call
+    (doc_id,) = upload(client, c.id, "file1.docx", docx_bytes("some notes"))  # unsettled: AI decides
+    assert calls == ["file1.docx"]
+    db.expire_all()
+    d = db.get(Document, doc_id)
+    assert (d.component, d.status, d.classified_by, d.ai_input_tokens) == ("assessment", "classified", "ai", 1200)
+    assert "التحليل الذكي" in d.reason

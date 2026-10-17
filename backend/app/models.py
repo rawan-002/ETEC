@@ -142,6 +142,8 @@ class Document(Base):
     text_excerpt: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
     duplicate_of: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+    ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
 
     course: Mapped[Course] = relationship()
