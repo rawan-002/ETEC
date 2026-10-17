@@ -38,17 +38,17 @@ def select(client, items):
 # ---------- login ----------
 
 def test_first_visit_sets_password_then_email_and_password(client, db):
-    found = client.post("/api/auth/lookup", json={"email": " A@BU.edu.sa "}).json()
+    found = client.post("/api/auth/lookup", json={"email": " A@EXAMPLE.invalid "}).json()
     assert found == {"signed_in": False, "name": "أستاذ أ", "role_ar": "عضو هيئة تدريس", "needs_setup": True, "can_self_setup": True}
-    assert client.post("/api/auth/setup", json={"email": "a@bu.edu.sa", "password": "short"}).status_code == 422
-    assert client.post("/api/auth/setup", json={"email": "a@bu.edu.sa", "password": "my-pass-123"}).status_code == 200
+    assert client.post("/api/auth/setup", json={"email": "a@example.invalid", "password": "short"}).status_code == 422
+    assert client.post("/api/auth/setup", json={"email": "a@example.invalid", "password": "my-pass-123"}).status_code == 200
     assert client.get("/api/auth/me").json()["needs_course_selection"] is True
     # The password is kept: setup cannot run again, and the next visit is email + password.
     client.cookies.clear()
-    assert client.post("/api/auth/setup", json={"email": "a@bu.edu.sa", "password": "other-pass-1"}).status_code == 409
-    assert client.post("/api/auth/lookup", json={"email": "a@bu.edu.sa"}).json()["needs_setup"] is False
-    assert client.post("/api/auth/login", json={"email": "a@bu.edu.sa", "password": "wrong-pass"}).status_code == 401
-    assert client.post("/api/auth/login", json={"email": "a@bu.edu.sa", "password": "my-pass-123"}).status_code == 200
+    assert client.post("/api/auth/setup", json={"email": "a@example.invalid", "password": "other-pass-1"}).status_code == 409
+    assert client.post("/api/auth/lookup", json={"email": "a@example.invalid"}).json()["needs_setup"] is False
+    assert client.post("/api/auth/login", json={"email": "a@example.invalid", "password": "wrong-pass"}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": "a@example.invalid", "password": "my-pass-123"}).status_code == 200
 
 
 def test_unknown_email_and_no_login_list(client, db):
@@ -61,15 +61,15 @@ def test_dean_password_cannot_be_self_set_and_lockout(client, db):
     dean = db.query(U).filter_by(name="العميد").one()
     dean.pin_hash = None
     db.commit()
-    assert client.post("/api/auth/lookup", json={"email": "dean@bu.edu.sa"}).json()["can_self_setup"] is False
-    assert client.post("/api/auth/setup", json={"email": "dean@bu.edu.sa", "password": "taken-over-1"}).status_code == 403
+    assert client.post("/api/auth/lookup", json={"email": "dean@example.invalid"}).json()["can_self_setup"] is False
+    assert client.post("/api/auth/setup", json={"email": "dean@example.invalid", "password": "taken-over-1"}).status_code == 403
     from app.security import hash_pin
     dean.pin_hash = hash_pin("123456")
     db.commit()
     for _ in range(4):
-        assert client.post("/api/auth/login", json={"email": "dean@bu.edu.sa", "password": "000000"}).status_code == 401
-    assert client.post("/api/auth/login", json={"email": "dean@bu.edu.sa", "password": "000000"}).status_code == 423
-    assert client.post("/api/auth/login", json={"email": "dean@bu.edu.sa", "password": "123456"}).status_code == 423
+        assert client.post("/api/auth/login", json={"email": "dean@example.invalid", "password": "000000"}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": "dean@example.invalid", "password": "000000"}).status_code == 423
+    assert client.post("/api/auth/login", json={"email": "dean@example.invalid", "password": "123456"}).status_code == 423
 
 
 def test_dean_correct_password(client, db):
@@ -82,7 +82,7 @@ def test_team_resets_a_password(client, db):
     uid = client.get("/api/auth/me").json()["id"]
     login(client, db, "فريق", "team-pass-1")
     assert client.post(f"/api/users/{uid}/reset-password").status_code == 200
-    assert client.post("/api/auth/lookup", json={"email": "a@bu.edu.sa"}).json()["needs_setup"] is True
+    assert client.post("/api/auth/lookup", json={"email": "a@example.invalid"}).json()["needs_setup"] is True
 
 
 # ---------- course selection ----------
@@ -285,3 +285,14 @@ def test_tester_hidden_login_and_full_isolation(client, db):
     login(client, db, "العميد", "123456")
     client.post("/api/reminders/run")
     assert not db.query(Notification).join(User).filter(User.name == "مختبر").count()
+
+
+def test_change_password(client, db):
+    login(client, db, "أستاذ أ", "first-pass-1")
+    bad = client.post("/api/auth/change-password", json={"current": "wrong-pass", "new": "second-pass-2"})
+    assert bad.status_code == 401
+    assert client.post("/api/auth/change-password", json={"current": "first-pass-1", "new": "short"}).status_code == 422
+    assert client.post("/api/auth/change-password", json={"current": "first-pass-1", "new": "second-pass-2"}).status_code == 200
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"email": "a@example.invalid", "password": "first-pass-1"}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": "a@example.invalid", "password": "second-pass-2"}).status_code == 200

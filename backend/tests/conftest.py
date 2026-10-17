@@ -7,6 +7,8 @@ _tmp = tempfile.mkdtemp(prefix="aq-test-")
 os.environ["AQ_DATABASE_URL"] = f"sqlite:///{Path(_tmp) / 'test.db'}"
 os.environ["AQ_LOCAL_STORAGE_DIR"] = str(Path(_tmp) / "files")
 os.environ["AQ_TASKS_INLINE"] = "1"
+# Never send real email from tests, whatever backend/.env contains.
+os.environ["AQ_SMTP_HOST"] = ""
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402
@@ -30,12 +32,12 @@ def db():
     cs = s.query(Department).filter_by(program_code="CS").one()
     se = s.query(Department).filter_by(program_code="SE").one()
     s.add_all([
-        User(name="العميد", role=DEAN, in_pilot=True, department=cs, pin_hash=hash_pin("123456"), email="dean@bu.edu.sa"),
-        User(name="رئيس CS", role=HEAD, in_pilot=True, department=cs, email="head@bu.edu.sa"),
-        User(name="رئيس SE", role=HEAD, in_pilot=True, department=se, email="sehead@bu.edu.sa"),
-        User(name="أستاذ أ", role=FACULTY, in_pilot=True, department=cs, email="a@bu.edu.sa"),
-        User(name="أستاذ ب", role=FACULTY, in_pilot=True, department=cs, email="b@bu.edu.sa"),
-        User(name="فريق", role=TEAM, in_pilot=True, email="team@bu.edu.sa", pin_hash=hash_pin("team-pass-1")),
+        User(name="العميد", role=DEAN, in_pilot=True, department=cs, pin_hash=hash_pin("123456"), email="dean@example.invalid"),
+        User(name="رئيس CS", role=HEAD, in_pilot=True, department=cs, email="head@example.invalid"),
+        User(name="رئيس SE", role=HEAD, in_pilot=True, department=se, email="sehead@example.invalid"),
+        User(name="أستاذ أ", role=FACULTY, in_pilot=True, department=cs, email="a@example.invalid"),
+        User(name="أستاذ ب", role=FACULTY, in_pilot=True, department=cs, email="b@example.invalid"),
+        User(name="فريق", role=TEAM, in_pilot=True, email="team@example.invalid", pin_hash=hash_pin("team-pass-1")),
     ])
     s.commit()
     yield s

@@ -73,6 +73,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <div className="text-sm font-semibold">{me.name}</div>
               <div className="text-xs text-ink-soft">{me.role_ar}{me.department ? ` · ${me.department}` : ""}</div>
             </div>
+            {!me.is_tester && <Link href="/account" className="btn-ghost">كلمة المرور</Link>}
             <button className="btn-ghost" onClick={logout}>خروج</button>
           </header>
           {me.is_tester && (

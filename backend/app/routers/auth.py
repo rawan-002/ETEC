@@ -101,6 +101,27 @@ def setup(body: SetupIn, response: Response, db: Session = Depends(get_db)):
     return _start_session(db, user, response)
 
 
+class ChangePasswordIn(BaseModel):
+    current: str = Field(max_length=128)
+    new: str = Field(max_length=128)
+
+
+@router.post("/change-password")
+def change_password(body: ChangePasswordIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.is_tester or not user.pin_hash:
+        raise HTTPException(409, "هذا الحساب لا يستخدم كلمة مرور")
+    if not verify_pin(body.current, user.pin_hash):
+        raise HTTPException(401, "كلمة المرور الحالية غير صحيحة")
+    if len(body.new) < MIN_PASSWORD:
+        raise HTTPException(422, f"كلمة المرور {MIN_PASSWORD} أحرف على الأقل")
+    if body.new == body.current:
+        raise HTTPException(422, "اختر كلمة مرور مختلفة عن الحالية")
+    user.pin_hash = hash_pin(body.new)
+    activity.log(db, "login", f"غيّر {user.name} كلمة المرور", user.id)
+    db.commit()
+    return {"ok": True}
+
+
 def _start_session(db: Session, user: User, response: Response) -> dict:
     activity.log(db, "login", f"دخل {user.name} ({role_ar(user)})", user.id, sandbox=user.is_tester)
     db.commit()
