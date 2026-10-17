@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .config import settings
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal, create_schema
 from .routers import auth, courses, management
 from .services import settings_store
 from .services.reminders import run_reminders
@@ -29,7 +29,7 @@ def _reminder_loop(stop: threading.Event) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(engine)
+    create_schema()
     stop = threading.Event()
     threading.Thread(target=_reminder_loop, args=(stop,), daemon=True).start()
     yield

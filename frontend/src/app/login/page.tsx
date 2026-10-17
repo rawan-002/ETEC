@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Logo } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 
 interface LoginUser { id: number; name: string; role: string; role_ar: string; department: string | null; needs_pin: boolean }
@@ -23,6 +22,9 @@ export default function LoginPage() {
     [users, query],
   );
 
+  const dean = selected?.role === "dean";
+  const pinReady = dean ? pin.length === 6 : pin.length >= 4;
+
   const submit = async () => {
     if (!selected) return;
     setBusy(true);
@@ -41,12 +43,9 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <section className="relative hidden overflow-hidden bg-navy p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="flex items-center gap-3">
-          <Logo size={48} />
-          <div>
-            <div className="text-lg font-bold">جامعة الباحة</div>
-            <div className="text-sm text-white/70">كلية الحاسبات والمعلومات</div>
-          </div>
+        <div>
+          <div className="text-lg font-bold">جامعة الباحة</div>
+          <div className="text-sm text-white/70">كلية الحاسبات والمعلومات</div>
         </div>
         <div>
           <h1 className="text-4xl font-bold leading-tight">معًا نحو كلية أكثر تميزًا</h1>
@@ -60,10 +59,7 @@ export default function LoginPage() {
 
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <Logo />
-            <div className="font-bold text-navy">جودة أكاديمية ذكية</div>
-          </div>
+          <div className="mb-8 font-bold text-navy lg:hidden">جودة أكاديمية ذكية</div>
           {!registering ? (
             <div className="card p-6">
               <h2 className="text-xl font-bold text-navy">تسجيل الدخول</h2>
@@ -96,14 +92,15 @@ export default function LoginPage() {
                   </div>
                   {selected.needs_pin && (
                     <div>
-                      <label className="label" htmlFor="pin">رمز الدخول (6 أرقام)</label>
-                      <input id="pin" className="input ltr text-center text-lg tracking-[0.5em]" inputMode="numeric" autoComplete="off"
-                        maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                        onKeyDown={(e) => e.key === "Enter" && pin.length === 6 && submit()} autoFocus />
+                      <label className="label" htmlFor="pin">{dean ? "رمز الدخول (6 أرقام)" : "رمز الدخول"}</label>
+                      <input id="pin" type="password" className="input ltr text-center text-lg tracking-[0.3em]" autoComplete="off"
+                        inputMode={dean ? "numeric" : "text"} maxLength={dean ? 6 : 12} value={pin}
+                        onChange={(e) => setPin(dean ? e.target.value.replace(/\D/g, "") : e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && pinReady && submit()} autoFocus />
                     </div>
                   )}
                   {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-                  <button className="btn-primary w-full" disabled={busy || (selected.needs_pin && pin.length !== 6)} onClick={submit}>
+                  <button className="btn-primary w-full" disabled={busy || (selected.needs_pin && !pinReady)} onClick={submit}>
                     دخول
                   </button>
                 </div>

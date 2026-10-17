@@ -30,6 +30,26 @@ class Base(DeclarativeBase):
     pass
 
 
+def create_schema() -> None:
+    """Create tables and add columns introduced after a database was first created.
+    Only additive changes are handled; anything bigger should use a real migration tool."""
+    from sqlalchemy import inspect, text
+
+    Base.metadata.create_all(engine)
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in existing:
+                    continue
+                default = col.default.arg if col.default is not None and not callable(col.default.arg) else None
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(engine.dialect)}'
+                if default is not None:
+                    ddl += f" DEFAULT {int(default) if isinstance(default, bool) else repr(default)}"
+                conn.execute(text(ddl))
+
+
 def get_db() -> Iterator[Session]:
     db = SessionLocal()
     try:

@@ -11,6 +11,7 @@ export interface Me {
   program: string | null;
   term: string | null;
   needs_course_selection: boolean;
+  is_tester: boolean;
 }
 
 export interface Teacher { assignment_id: number; user_id: number; name: string; is_coordinator: boolean }

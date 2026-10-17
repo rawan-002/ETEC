@@ -13,7 +13,7 @@ from ..models import (
 )
 from ..security import can_see_program, current_user, head_program
 from ..services import activity
-from ..services.completeness import all_course_completeness, course_completeness
+from ..services.completeness import all_course_completeness, course_completeness, visible_docs
 from ..services.pipeline import COMPONENT_AR, ingest
 from ..services.storage import storage
 
@@ -41,8 +41,13 @@ def course_out(c: Course, comp=None, assignments=None) -> dict:
     return out
 
 
-def _assignments(db: Session, term_id: int, course_ids: list[int] | None = None) -> dict[int, list[Assignment]]:
-    q = select(Assignment).where(Assignment.term_id == term_id)
+def _assignments(db: Session, term_id: int, course_ids: list[int] | None = None,
+                 viewer: User | None = None) -> dict[int, list[Assignment]]:
+    """Real assignments; a tester also sees their own sandbox ones."""
+    visible = Assignment.sandbox.is_(False)
+    if viewer is not None and viewer.is_tester:
+        visible = visible | (Assignment.user_id == viewer.id)
+    q = select(Assignment).where(Assignment.term_id == term_id, visible)
     if course_ids is not None:
         q = q.where(Assignment.course_id.in_(course_ids))
     out: dict[int, list[Assignment]] = {}
@@ -63,7 +68,7 @@ def list_courses(program: str = "CS", user: User = Depends(current_user), db: Se
     """Plan courses for course selection; shows who already teaches or coordinates each one."""
     term = active_term(db)
     courses = db.scalars(select(Course).where(Course.program == program).order_by(Course.sort_order)).all()
-    assigned = _assignments(db, term.id, [c.id for c in courses])
+    assigned = _assignments(db, term.id, [c.id for c in courses], user)
     return [course_out(c, assignments=assigned.get(c.id, [])) for c in courses]
 
 
@@ -105,18 +110,20 @@ def save_selection(body: SelectionIn, user: User = Depends(current_user), db: Se
             raise HTTPException(404, f"المقرر {course_id} غير موجود")
         if coord:
             other = db.scalar(select(Assignment).where(Assignment.term_id == term.id, Assignment.course_id == course_id,
-                                                       Assignment.is_coordinator.is_(True), Assignment.user_id != user.id))
+                                                       Assignment.is_coordinator.is_(True), Assignment.user_id != user.id,
+                                                       Assignment.sandbox.is_(False)))
             if other:
                 conflicts.append({"course": f"{course.display_code} {course.title}", "coordinator": other.user.name})
                 coord = False
         if course_id in existing:
             existing[course_id].is_coordinator = coord
         else:
-            db.add(Assignment(term_id=term.id, course_id=course_id, user_id=user.id, is_coordinator=coord))
+            db.add(Assignment(term_id=term.id, course_id=course_id, user_id=user.id, is_coordinator=coord,
+                              sandbox=user.is_tester))
     if not db.scalar(select(SelectionSubmitted.id).where(SelectionSubmitted.term_id == term.id, SelectionSubmitted.user_id == user.id)):
         db.add(SelectionSubmitted(term_id=term.id, user_id=user.id))
     msg = f"اختار {user.name} {len(wanted)} مقررات للفصل {term.code}" if wanted else f"أفاد {user.name} أنه لا يدرّس مقررات في الفصل {term.code}"
-    activity.log(db, "assignment", msg, user.id, "CS")
+    activity.log(db, "assignment", msg, user.id, "CS", sandbox=user.is_tester)
     db.commit()
     return {"ok": True, "conflicts": conflicts}
 
@@ -126,8 +133,8 @@ def my_courses(user: User = Depends(current_user), db: Session = Depends(get_db)
     term = active_term(db)
     rows = db.scalars(select(Assignment).where(Assignment.term_id == term.id, Assignment.user_id == user.id)).all()
     courses = [a.course for a in rows]
-    comp = all_course_completeness(db, courses, term.id)
-    assigned = _assignments(db, term.id, [c.id for c in courses])
+    comp = all_course_completeness(db, courses, term.id, user.id)
+    assigned = _assignments(db, term.id, [c.id for c in courses], user)
     out = []
     for a in rows:
         item = course_out(a.course, comp[a.course_id], assigned.get(a.course_id, []))
@@ -144,12 +151,13 @@ def course_detail(course_id: int, user: User = Depends(current_user), db: Sessio
         raise HTTPException(404, "المقرر غير موجود")
     if not can_view_course(db, user, course, term.id):
         raise HTTPException(403, "هذا المقرر خارج صلاحياتك")
-    assigned = _assignments(db, term.id, [course.id]).get(course.id, [])
-    docs = db.scalars(select(Document).where(Document.course_id == course.id, Document.term_id == term.id)
-                      .order_by(Document.uploaded_at.desc())).all()
-    findings = db.scalars(select(Finding).where(Finding.course_id == course.id)).all()
+    assigned = _assignments(db, term.id, [course.id], user).get(course.id, [])
+    docs = db.scalars(select(Document).where(Document.course_id == course.id, Document.term_id == term.id,
+                                             visible_docs(user.id)).order_by(Document.uploaded_at.desc())).all()
+    findings = db.scalars(select(Finding).join(Document, Finding.document_id == Document.id)
+                          .where(Finding.course_id == course.id, visible_docs(user.id))).all()
     mine = next((a for a in assigned if a.user_id == user.id), None)
-    out = course_out(course, course_completeness(db, course, term.id), assigned)
+    out = course_out(course, course_completeness(db, course, term.id, user.id), assigned)
     out["documents"] = [doc_out(d) for d in docs]
     out["findings"] = [{"kind": f.kind, "message": f.message} for f in findings]
     out["can_upload"] = mine is not None
@@ -191,7 +199,7 @@ async def upload(course_id: int, files: list[UploadFile] = File(...), component:
 @router.get("/documents/{doc_id}/download")
 def download(doc_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     doc = db.get(Document, doc_id)
-    if not doc or not can_view_course(db, user, doc.course, doc.term_id):
+    if not doc or (doc.sandbox and doc.uploaded_by != user.id) or not can_view_course(db, user, doc.course, doc.term_id):
         raise HTTPException(404, "الملف غير موجود")
     return Response(storage.get(doc.storage_key), media_type="application/octet-stream",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(doc.filename)}"})
@@ -221,7 +229,7 @@ def set_practical(course_id: int, body: PracticalIn, user: User = Depends(curren
 def review_queue(user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role not in (TEAM, DEAN):
         raise HTTPException(403, "لفريق المشروع")
-    docs = db.scalars(select(Document).where(Document.status.in_(("needs_review", "error")))
+    docs = db.scalars(select(Document).where(Document.status.in_(("needs_review", "error")), Document.sandbox.is_(False))
                       .order_by(Document.uploaded_at.desc())).all()
     return [doc_out(d) for d in docs]
 

@@ -43,6 +43,9 @@ class User(Base):
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))
     role: Mapped[str] = mapped_column(String(20), default=FACULTY)
     in_pilot: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Project-team testers act as faculty, but everything they do is sandboxed: invisible to others
+    # and never counted in completeness, distribution or reminders.
+    is_tester: Mapped[bool] = mapped_column(Boolean, default=False)
     # Self-registered users ("اسمي غير موجود") wait for the department head.
     pending_approval: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -89,6 +92,7 @@ class Assignment(Base):
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     is_coordinator: Mapped[bool] = mapped_column(Boolean, default=False)
+    sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     course: Mapped[Course] = relationship()
@@ -138,6 +142,7 @@ class Document(Base):
     text_excerpt: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
     duplicate_of: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+    sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
 
     course: Mapped[Course] = relationship()
     uploader: Mapped[User] = relationship()
@@ -185,5 +190,6 @@ class ActivityEvent(Base):
     message: Mapped[str] = mapped_column(Text)
     program: Mapped[str | None] = mapped_column(String(10))
     course_id: Mapped[int | None] = mapped_column(ForeignKey("courses.id"))
+    sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
 
     actor: Mapped[User | None] = relationship()

@@ -219,3 +219,33 @@ def test_dashboard_and_activity_scoping(client, db):
     assert client.get("/api/dashboard").json()["programs"] == []
     msgs = [a["message"] for a in client.get("/api/activity").json()]
     assert all("العميد" not in m for m in msgs)
+
+
+# ---------- sandbox testers ----------
+
+def test_tester_is_sandboxed(client, db):
+    from app.security import hash_pin
+    db.add(User(name="مختبر", role="faculty", is_tester=True, in_pilot=True, pin_hash=hash_pin("abcd1234")))
+    db.commit()
+    c = course(db, "CS1004")
+    login(client, db, "مختبر", "abcd1234")
+    assert client.get("/api/auth/me").json()["is_tester"] is True
+    select(client, [{"course_id": c.id, "is_coordinator": True}])
+    upload(client, c.id, "Final exam.docx", docx_bytes("Final exam\nAnswer all questions"))
+    mine = client.get(f"/api/courses/{c.id}").json()
+    assert next(x for x in mine["components"] if x["component"] == "assessment")["status"] == "present"
+
+    # A real member can still become coordinator and sees none of the tester's data.
+    login(client, db, "أستاذ أ")
+    assert select(client, [{"course_id": c.id, "is_coordinator": True}])["conflicts"] == []
+    real = client.get(f"/api/courses/{c.id}").json()
+    assert real["documents"] == [] and [t["name"] for t in real["teachers"]] == ["أستاذ أ"]
+    assert all("مختبر" not in a["message"] for a in client.get("/api/activity").json())
+
+    login(client, db, "رئيس CS")
+    client.post("/api/programs/CS/distribution/approve")
+    dist = client.get("/api/programs/CS/distribution").json()
+    assert all(t["name"] != "مختبر" for x in dist["courses"] for t in x["teachers"])
+    login(client, db, "العميد", "123456")
+    client.post("/api/reminders/run")
+    assert not db.query(Notification).join(User).filter(User.name == "مختبر").count()

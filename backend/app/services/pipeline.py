@@ -28,11 +28,11 @@ def ingest(db: Session, *, data: bytes, filename: str, course: Course, term_id: 
             docs.append(_store(db, entry.data, entry.path.split("/")[-1], course, term_id, user, archive_path=f"{filename}/{entry.path}"))
         if expanded.skipped:
             activity.log(db, "upload", f"تُجاهلت {len(expanded.skipped)} ملفات مؤقتة أو تتجاوز الحد داخل {filename}",
-                         user.id, course.program, course.id)
+                         user.id, course.program, course.id, user.is_tester)
     else:
         docs.append(_store(db, data, filename, course, term_id, user))
     activity.log(db, "upload", f"رفع {len(docs)} ملف لمقرر {course.display_code} {course.title}",
-                 user.id, course.program, course.id)
+                 user.id, course.program, course.id, user.is_tester)
     db.commit()
     for d in docs:
         submit(process_document, d.id, component_hint)
@@ -45,7 +45,7 @@ def _store(db: Session, data: bytes, filename: str, course: Course, term_id: int
     key = make_key(sha)
     storage.put(key, data)
     doc = Document(term_id=term_id, course_id=course.id, uploaded_by=user.id, filename=filename,
-                   archive_path=archive_path, sha256=sha, size=len(data), storage_key=key)
+                   archive_path=archive_path, sha256=sha, size=len(data), storage_key=key, sandbox=user.is_tester)
     db.add(doc)
     db.flush()
     return doc
@@ -70,7 +70,8 @@ def _process(db: Session, doc: Document, component_hint: str | None) -> None:
 
     earlier = db.scalar(select(Document).where(
         Document.course_id == doc.course_id, Document.term_id == doc.term_id,
-        Document.sha256 == doc.sha256, Document.id < doc.id, Document.status != "duplicate"))
+        Document.sha256 == doc.sha256, Document.id < doc.id, Document.status != "duplicate",
+        Document.sandbox == doc.sandbox))
     if earlier:
         doc.status, doc.duplicate_of = "duplicate", earlier.id
         doc.component = earlier.component
@@ -119,7 +120,7 @@ def _process(db: Session, doc: Document, component_hint: str | None) -> None:
     activity.log(db, "classify",
                  f"صُنّف «{doc.filename}» كـ{COMPONENT_AR[doc.component]} (ثقة {int(doc.confidence * 100)}%)"
                  + (" — أُحيل لفريق المشروع" if doc.status == "needs_review" else ""),
-                 None, course.program, course.id)
+                 doc.uploaded_by if doc.sandbox else None, course.program, course.id, doc.sandbox)
 
 
 def _finding(db: Session, doc: Document, kind: str, message: str) -> None:
@@ -127,5 +128,5 @@ def _finding(db: Session, doc: Document, kind: str, message: str) -> None:
 
 
 def _log_problem(db: Session, doc: Document) -> None:
-    activity.log(db, "classify", f"تعذّرت معالجة «{doc.filename}»: {doc.error}", None,
-                 doc.course.program, doc.course_id)
+    activity.log(db, "classify", f"تعذّرت معالجة «{doc.filename}»: {doc.error}",
+                 doc.uploaded_by if doc.sandbox else None, doc.course.program, doc.course_id, doc.sandbox)

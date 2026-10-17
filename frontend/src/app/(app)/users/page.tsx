@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { ErrorNote, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 
-interface U { id: number; name: string; email: string | null; email_confirmed: boolean; role: string; department: string | null; in_pilot: boolean; pending: boolean; active: boolean }
+interface U { id: number; name: string; is_tester: boolean; email: string | null; email_confirmed: boolean; role: string; department: string | null; in_pilot: boolean; pending: boolean; active: boolean }
 const ROLE_AR: Record<string, string> = { dean: "عميد الكلية", head: "رئيس قسم", faculty: "عضو هيئة تدريس", team: "فريق المشروع" };
 
 export default function UsersPage() {
@@ -54,7 +54,7 @@ export default function UsersPage() {
             {rows.map((u) => (
               <tr key={u.id}>
                 <td className="p-3 font-medium">{u.name}</td>
-                <td className="p-3">{ROLE_AR[u.role]}</td>
+                <td className="p-3">{u.is_tester ? "فريق المشروع (تجريبي)" : ROLE_AR[u.role]}</td>
                 <td className="p-3 text-ink-soft">{u.department ?? "—"}</td>
                 <td className="p-3"><span className="ltr">{u.email ?? "—"}</span>{u.email && !u.email_confirmed && <span className="mr-2 text-xs text-amber-700">غير مؤكد</span>}</td>
                 <td className="p-3 text-center text-xs">{u.pending ? "بانتظار رئيس القسم" : !u.active ? "معطّل" : u.in_pilot ? "في التجربة" : "—"}</td>

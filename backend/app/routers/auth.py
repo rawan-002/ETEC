@@ -20,8 +20,12 @@ ROLE_AR = {"dean": "عميد الكلية", "head": "رئيس القسم", "facu
 def login_list(db: Session = Depends(get_db)):
     users = db.scalars(select(User).where(User.active.is_(True), User.pending_approval.is_(False), User.in_pilot.is_(True))
                        .order_by(User.role != DEAN, User.role != HEAD, User.name)).all()
-    return [{"id": u.id, "name": u.name, "role": u.role, "role_ar": ROLE_AR[u.role],
+    return [{"id": u.id, "name": u.name, "role": u.role, "role_ar": role_ar(u),
              "department": u.department.name if u.department else None, "needs_pin": _needs_pin(u)} for u in users]
+
+
+def role_ar(u: User) -> str:
+    return "فريق المشروع (وضع تجريبي)" if u.is_tester else ROLE_AR[u.role]
 
 
 def _needs_pin(u: User) -> bool:
@@ -56,7 +60,7 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
             db.commit()
             raise HTTPException(401, f"الرمز غير صحيح. المحاولات المتبقية: {left}")
         user.failed_pin_attempts, user.locked_until = 0, None
-    activity.log(db, "login", f"دخل {user.name} ({ROLE_AR[user.role]})", user.id)
+    activity.log(db, "login", f"دخل {user.name} ({role_ar(user)})", user.id, sandbox=user.is_tester)
     db.commit()
     response.set_cookie(COOKIE, issue_session(user.id), httponly=True, samesite="lax",
                         max_age=settings.session_days * 86400, secure=settings.frontend_origin.startswith("https"))
@@ -74,7 +78,7 @@ def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
     term = db.scalar(select(Term).where(Term.active.is_(True)))
     submitted = term is not None and db.scalar(select(SelectionSubmitted.id).where(
         SelectionSubmitted.user_id == user.id, SelectionSubmitted.term_id == term.id)) is not None
-    return {"id": user.id, "name": user.name, "role": user.role, "role_ar": ROLE_AR[user.role],
+    return {"id": user.id, "name": user.name, "role": user.role, "role_ar": role_ar(user), "is_tester": user.is_tester,
             "department": user.department.name if user.department else None,
             "program": user.department.program_code if user.department else None,
             "term": term.code if term else None,

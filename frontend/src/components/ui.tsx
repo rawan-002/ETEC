@@ -55,15 +55,3 @@ export function ErrorNote({ message }: { message: string | null }) {
 export function Spinner() {
   return <div className="muted py-10 text-center">جارٍ التحميل…</div>;
 }
-
-export function Logo({ size = 40 }: { size?: number }) {
-  // Placeholder emblem in the university colours; replace with /public/logo.png when available.
-  return (
-    <svg width={size} height={size} viewBox="0 0 40 40" aria-label="جامعة الباحة">
-      <rect width="40" height="40" rx="10" fill="#13294B" />
-      <path d="M10 28 L20 10 L30 28 Z" fill="#3FA9DF" />
-      <path d="M15 28 L20 19 L25 28 Z" fill="#4C9A2A" />
-      <rect x="9" y="29" width="22" height="2.5" rx="1.2" fill="#fff" />
-    </svg>
-  );
-}

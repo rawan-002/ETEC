@@ -23,7 +23,7 @@ function FacultyDashboard() {
   );
   return (
     <div className="space-y-6">
-      <Hero title={`أهلًا ${me.name.split(" ")[0]}`} subtitle="ارفع ملفات مقرراتك مرة واحدة، والمنصة تفرزها وتتابع النواقص." />
+      <Hero title={me.is_tester ? "أهلًا بفريق المشروع" : `أهلًا ${me.name.split(" ")[0]}`} subtitle="ارفع ملفات مقرراتك مرة واحدة، والمنصة تفرزها وتتابع النواقص." />
       {missing.length > 0 ? (
         <div className="card border-red-200 p-5">
           <h2 className="font-bold text-red-700">المطلوب منك ({missing.length})</h2>

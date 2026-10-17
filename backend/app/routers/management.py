@@ -32,7 +32,7 @@ def distribution(program: str, user: User = Depends(current_user), db: Session =
     _check_program(user, program)
     term = active_term(db)
     courses = db.scalars(select(Course).where(Course.program == program).order_by(Course.sort_order)).all()
-    assigned = _assignments(db, term.id, [c.id for c in courses])
+    assigned = _assignments(db, term.id, [c.id for c in courses], user)
     approval = db.scalar(select(DistributionApproval).where(DistributionApproval.term_id == term.id,
                                                             DistributionApproval.program == program))
     rows = [course_out(c, assignments=assigned.get(c.id, [])) for c in courses]
@@ -164,7 +164,8 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
 
 
 def _review_count(db: Session) -> int:
-    return db.scalar(select(func.count()).select_from(Document).where(Document.status.in_(("needs_review", "error")))) or 0
+    return db.scalar(select(func.count()).select_from(Document).where(
+        Document.status.in_(("needs_review", "error")), Document.sandbox.is_(False))) or 0
 
 
 # ---------- Notifications, reminders, settings ----------
@@ -222,7 +223,7 @@ def put_settings(body: SettingsIn, user: User = Depends(require(DEAN, TEAM)), db
 
 @router.get("/activity")
 def activity_log(kind: str | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    q = select(ActivityEvent).order_by(ActivityEvent.at.desc()).limit(300)
+    q = select(ActivityEvent).where(ActivityEvent.sandbox.is_(False) | (ActivityEvent.actor_id == user.id))         .order_by(ActivityEvent.at.desc()).limit(300)
     if kind:
         q = q.where(ActivityEvent.kind == kind)
     if user.role == HEAD:
@@ -240,6 +241,7 @@ def activity_log(kind: str | None = None, user: User = Depends(current_user), db
 @router.get("/users")
 def users(user: User = Depends(require(DEAN, TEAM)), db: Session = Depends(get_db)):
     return [{"id": u.id, "name": u.name, "email": u.email, "email_confirmed": u.email_confirmed, "role": u.role,
+             "is_tester": u.is_tester,
              "department": u.department.name if u.department else None, "in_pilot": u.in_pilot,
              "pending": u.pending_approval, "active": u.active}
             for u in db.scalars(select(User).order_by(User.in_pilot.desc(), User.name))]

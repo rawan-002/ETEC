@@ -28,7 +28,7 @@ def run_reminders(db: Session, force: bool = False) -> dict:
     deadline_days = get_int(db, "deadline_days", 7)
     approved = {a.program for a in db.scalars(select(DistributionApproval).where(DistributionApproval.term_id == term.id))}
 
-    assignments = db.scalars(select(Assignment).where(Assignment.term_id == term.id)).all()
+    assignments = db.scalars(select(Assignment).where(Assignment.term_id == term.id, Assignment.sandbox.is_(False))).all()
     assignments = [a for a in assignments if a.course.program in approved]
     comp = all_course_completeness(db, list({a.course_id: a.course for a in assignments}.values()), term.id)
 

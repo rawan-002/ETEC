@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import { api, useApi } from "@/lib/api";
 import type { Me, Role } from "@/lib/types";
-import { Logo, Spinner } from "./ui";
+import { Spinner } from "./ui";
 
 const MeContext = createContext<Me | null>(null);
 export const useMe = () => useContext(MeContext)!;
@@ -46,7 +46,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen lg:flex">
         <aside className={`${open ? "block" : "hidden"} fixed inset-0 z-30 bg-navy text-white lg:static lg:block lg:min-h-screen lg:w-64 lg:shrink-0`}>
           <div className="flex items-center gap-3 p-5">
-            <Logo />
             <div>
               <div className="font-bold">جودة أكاديمية ذكية</div>
               <div className="text-xs text-white/60">كلية الحاسبات والمعلومات</div>
@@ -76,6 +75,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <button className="btn-ghost" onClick={logout}>خروج</button>
           </header>
+          {me.is_tester && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-800 lg:px-8">
+              وضع تجريبي: اختياراتك وملفاتك لا تُحتسب في الاكتمال ولا تظهر لأي مستخدم آخر.
+            </div>
+          )}
           <main className="mx-auto max-w-6xl p-4 lg:p-8">{children}</main>
         </div>
       </div>
