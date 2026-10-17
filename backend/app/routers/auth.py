@@ -18,7 +18,8 @@ ROLE_AR = {"dean": "عميد الكلية", "head": "رئيس القسم", "facu
 
 @router.get("/users")
 def login_list(db: Session = Depends(get_db)):
-    users = db.scalars(select(User).where(User.active.is_(True), User.pending_approval.is_(False), User.in_pilot.is_(True))
+    users = db.scalars(select(User).where(User.active.is_(True), User.pending_approval.is_(False), User.in_pilot.is_(True),
+                                          User.is_tester.is_(False))
                        .order_by(User.role != DEAN, User.role != HEAD, User.name)).all()
     return [{"id": u.id, "name": u.name, "role": u.role, "role_ar": role_ar(u),
              "department": u.department.name if u.department else None, "needs_pin": _needs_pin(u)} for u in users]
@@ -40,7 +41,7 @@ class LoginIn(BaseModel):
 @router.post("/login")
 def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
     user = db.get(User, body.user_id)
-    if not user or not user.active or user.pending_approval or not user.in_pilot:
+    if not user or not user.active or user.pending_approval or not user.in_pilot or user.is_tester:
         raise HTTPException(404, "المستخدم غير موجود")
     if _needs_pin(user):
         if user.locked_until and aware(user.locked_until) > now():
@@ -60,6 +61,24 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
             db.commit()
             raise HTTPException(401, f"الرمز غير صحيح. المحاولات المتبقية: {left}")
         user.failed_pin_attempts, user.locked_until = 0, None
+    return _start_session(db, user, response)
+
+
+class AliasIn(BaseModel):
+    word: str = Field(max_length=40)
+
+
+@router.post("/alias")
+def alias_login(body: AliasIn, response: Response, db: Session = Depends(get_db)):
+    """Hidden sign-in for sandbox testers: the word typed in the login search box."""
+    word = body.word.strip().lower()
+    user = db.scalar(select(User).where(User.login_alias == word, User.is_tester.is_(True), User.active.is_(True))) if word else None
+    if not user:
+        raise HTTPException(404, "لا يوجد اسم مطابق")
+    return _start_session(db, user, response)
+
+
+def _start_session(db: Session, user: User, response: Response) -> dict:
     activity.log(db, "login", f"دخل {user.name} ({role_ar(user)})", user.id, sandbox=user.is_tester)
     db.commit()
     response.set_cookie(COOKIE, issue_session(user.id), httponly=True, samesite="lax",

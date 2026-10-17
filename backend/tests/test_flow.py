@@ -223,25 +223,38 @@ def test_dashboard_and_activity_scoping(client, db):
 
 # ---------- sandbox testers ----------
 
-def test_tester_is_sandboxed(client, db):
-    from app.security import hash_pin
-    db.add(User(name="مختبر", role="faculty", is_tester=True, in_pilot=True, pin_hash=hash_pin("abcd1234")))
+def test_tester_hidden_login_and_full_isolation(client, db):
+    db.add(User(name="مختبر", role="faculty", is_tester=True, in_pilot=True, login_alias="taif"))
     db.commit()
     c = course(db, "CS1004")
-    login(client, db, "مختبر", "abcd1234")
+    # A real member uploads first; the tester must never see this file.
+    login(client, db, "أستاذ أ")
+    select(client, [{"course_id": c.id, "is_coordinator": True}])
+    (real_doc,) = upload(client, c.id, "spec.docx", docx_bytes("Course Specifications\nCourse Learning Outcomes"))
+
+    client.cookies.clear()
+    assert "مختبر" not in [u["name"] for u in client.get("/api/auth/users").json()]
+    tester_id = db.query(User).filter_by(name="مختبر").one().id
+    assert client.post("/api/auth/login", json={"user_id": tester_id}).status_code == 404
+    assert client.post("/api/auth/alias", json={"word": "nobody"}).status_code == 404
+    assert client.post("/api/auth/alias", json={"word": " Taif "}).status_code == 200
     assert client.get("/api/auth/me").json()["is_tester"] is True
+
     select(client, [{"course_id": c.id, "is_coordinator": True}])
     upload(client, c.id, "Final exam.docx", docx_bytes("Final exam\nAnswer all questions"))
     mine = client.get(f"/api/courses/{c.id}").json()
-    assert next(x for x in mine["components"] if x["component"] == "assessment")["status"] == "present"
+    assert [d["filename"] for d in mine["documents"]] == ["Final exam.docx"]
+    status = {x["component"]: x["status"] for x in mine["components"]}
+    assert status["assessment"] == "present" and status["spec"] == "missing"
+    assert client.get(f"/api/documents/{real_doc}/download").status_code == 404
+    assert all("أستاذ أ" not in a["message"] for a in client.get("/api/activity").json())
 
-    # A real member can still become coordinator and sees none of the tester's data.
+    # Real users see none of the tester's data.
     login(client, db, "أستاذ أ")
-    assert select(client, [{"course_id": c.id, "is_coordinator": True}])["conflicts"] == []
     real = client.get(f"/api/courses/{c.id}").json()
-    assert real["documents"] == [] and [t["name"] for t in real["teachers"]] == ["أستاذ أ"]
+    assert [d["filename"] for d in real["documents"]] == ["spec.docx"]
+    assert [t["name"] for t in real["teachers"]] == ["أستاذ أ"]
     assert all("مختبر" not in a["message"] for a in client.get("/api/activity").json())
-
     login(client, db, "رئيس CS")
     client.post("/api/programs/CS/distribution/approve")
     dist = client.get("/api/programs/CS/distribution").json()

@@ -22,6 +22,18 @@ export default function LoginPage() {
     [users, query],
   );
 
+  // Enter in the search box: a project-team word signs in quietly; otherwise a single match is selected.
+  const onSearchEnter = async () => {
+    const word = query.trim();
+    if (!word) return;
+    try {
+      await api("/api/auth/alias", { method: "POST", json: { word } });
+      router.replace("/");
+    } catch {
+      if (filtered.length === 1) setSelected(filtered[0]);
+    }
+  };
+
   const dean = selected?.role === "dean";
   const pinReady = dean ? pin.length === 6 : pin.length >= 4;
 
@@ -67,7 +79,8 @@ export default function LoginPage() {
 
               {!selected ? (
                 <>
-                  <input className="input mt-5" placeholder="ابحث عن اسمك…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
+                  <input className="input mt-5" placeholder="ابحث عن اسمك…" value={query} onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && onSearchEnter()} autoFocus />
                   <ul className="mt-3 max-h-80 space-y-1 overflow-y-auto" role="listbox">
                     {filtered.map((u) => (
                       <li key={u.id}>

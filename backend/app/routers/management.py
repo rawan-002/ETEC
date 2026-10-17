@@ -228,6 +228,8 @@ def activity_log(kind: str | None = None, user: User = Depends(current_user), db
         q = q.where(ActivityEvent.kind == kind)
     if user.role == HEAD:
         q = q.where((ActivityEvent.program == head_program(user)) | (ActivityEvent.actor_id == user.id))
+    elif user.is_tester:
+        q = q.where(ActivityEvent.actor_id == user.id)
     elif user.role == FACULTY:
         term = active_term(db)
         mine = select(Assignment.course_id).where(Assignment.user_id == user.id, Assignment.term_id == term.id)

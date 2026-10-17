@@ -18,7 +18,7 @@ cd backend
 python -m venv .venv && .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\python -m app.cli init "<مسار>\المستخدمون_وتوزيع_المقررات_v3.xlsx"
 .venv\Scripts\python -m app.cli set-pin "نزار حسن محمد الشريف"
-.venv\Scripts\python -m app.cli add-team "<اسم عضو فريق المشروع>"
+.venv\Scripts\python -m app.cli add-tester "<الاسم>" <كلمة الدخول>   # حساب تجريبي معزول، يدخل بكتابة الكلمة في خانة البحث
 .venv\Scripts\python -m uvicorn app.main:app --port 8000
 
 # الواجهة (نافذة أخرى)

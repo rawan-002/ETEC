@@ -2,7 +2,7 @@
   python -m app.cli init <users.xlsx>      create tables, load the CS plan, departments, term and users
   python -m app.cli set-pin "<name>"       set a 6-digit PIN (prompted, not echoed)
   python -m app.cli add-team "<name>"      add a project-team member to the pilot
-  python -m app.cli add-tester "<name>" <email>   sandboxed project-team tester (faculty view, PIN prompted)
+  python -m app.cli add-tester "<name>" <word> [email]   sandboxed tester, signed in by typing <word> on the login page
   python -m app.cli remind                 run the reminder job once
 """
 import getpass
@@ -47,12 +47,10 @@ def main(argv: list[str]) -> None:
             print("team member:", user.name)
         elif cmd == "add-tester":
             user = db.scalar(select(User).where(User.name == args[0])) or User(name=args[0])
-            pin = getpass.getpass("Code (4-12 characters): ")
-            if not 4 <= len(pin) <= 12 or pin != getpass.getpass("Repeat: "):
-                sys.exit("code must be 4-12 characters, the same twice")
             user.role, user.is_tester, user.in_pilot, user.active = FACULTY, True, True, True
-            user.email = args[1] if len(args) > 1 else user.email
-            user.pin_hash, user.failed_pin_attempts, user.locked_until = hash_pin(pin), 0, None
+            user.login_alias = args[1].strip().lower()
+            user.email = args[2] if len(args) > 2 else user.email
+            user.pin_hash = None
             db.add(user)
             print("tester:", user.name)
         elif cmd == "remind":

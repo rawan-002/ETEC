@@ -133,7 +133,7 @@ def my_courses(user: User = Depends(current_user), db: Session = Depends(get_db)
     term = active_term(db)
     rows = db.scalars(select(Assignment).where(Assignment.term_id == term.id, Assignment.user_id == user.id)).all()
     courses = [a.course for a in rows]
-    comp = all_course_completeness(db, courses, term.id, user.id)
+    comp = all_course_completeness(db, courses, term.id, user)
     assigned = _assignments(db, term.id, [c.id for c in courses], user)
     out = []
     for a in rows:
@@ -153,11 +153,11 @@ def course_detail(course_id: int, user: User = Depends(current_user), db: Sessio
         raise HTTPException(403, "هذا المقرر خارج صلاحياتك")
     assigned = _assignments(db, term.id, [course.id], user).get(course.id, [])
     docs = db.scalars(select(Document).where(Document.course_id == course.id, Document.term_id == term.id,
-                                             visible_docs(user.id)).order_by(Document.uploaded_at.desc())).all()
+                                             visible_docs(user)).order_by(Document.uploaded_at.desc())).all()
     findings = db.scalars(select(Finding).join(Document, Finding.document_id == Document.id)
-                          .where(Finding.course_id == course.id, visible_docs(user.id))).all()
+                          .where(Finding.course_id == course.id, visible_docs(user))).all()
     mine = next((a for a in assigned if a.user_id == user.id), None)
-    out = course_out(course, course_completeness(db, course, term.id, user.id), assigned)
+    out = course_out(course, course_completeness(db, course, term.id, user), assigned)
     out["documents"] = [doc_out(d) for d in docs]
     out["findings"] = [{"kind": f.kind, "message": f.message} for f in findings]
     out["can_upload"] = mine is not None
@@ -199,7 +199,8 @@ async def upload(course_id: int, files: list[UploadFile] = File(...), component:
 @router.get("/documents/{doc_id}/download")
 def download(doc_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     doc = db.get(Document, doc_id)
-    if not doc or (doc.sandbox and doc.uploaded_by != user.id) or not can_view_course(db, user, doc.course, doc.term_id):
+    hidden = doc is not None and ((doc.sandbox or user.is_tester) and doc.uploaded_by != user.id)
+    if not doc or hidden or not can_view_course(db, user, doc.course, doc.term_id):
         raise HTTPException(404, "الملف غير موجود")
     return Response(storage.get(doc.storage_key), media_type="application/octet-stream",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(doc.filename)}"})

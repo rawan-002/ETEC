@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import COMPONENTS, PRACTICAL, Course, Document
+from ..models import COMPONENTS, PRACTICAL, Course, Document, User
 
 
 @dataclass
@@ -38,16 +38,17 @@ class CourseCompleteness:
         return [c.component for c in self.components if c.status == "missing"]
 
 
-def visible_docs(viewer_id: int | None):
-    """Real documents, plus a tester's own sandbox uploads when the tester is the viewer."""
-    if viewer_id is None:
-        return Document.sandbox.is_(False)
-    return Document.sandbox.is_(False) | (Document.uploaded_by == viewer_id)
+def visible_docs(viewer: User | None):
+    """Everyone sees real documents only; a sandbox tester sees only their own uploads,
+    so a tester account never exposes real course files."""
+    if viewer is not None and viewer.is_tester:
+        return Document.uploaded_by == viewer.id
+    return Document.sandbox.is_(False)
 
 
-def course_completeness(db: Session, course: Course, term_id: int, viewer_id: int | None = None) -> CourseCompleteness:
+def course_completeness(db: Session, course: Course, term_id: int, viewer: User | None = None) -> CourseCompleteness:
     docs = db.scalars(select(Document).where(Document.course_id == course.id, Document.term_id == term_id,
-                                             visible_docs(viewer_id))).all()
+                                             visible_docs(viewer))).all()
     return completeness_from_docs(course, docs)
 
 
@@ -71,10 +72,10 @@ def completeness_from_docs(course: Course, docs) -> CourseCompleteness:
 
 
 def all_course_completeness(db: Session, courses: list[Course], term_id: int,
-                            viewer_id: int | None = None) -> dict[int, CourseCompleteness]:
+                            viewer: User | None = None) -> dict[int, CourseCompleteness]:
     ids = [c.id for c in courses]
     docs = db.scalars(select(Document).where(Document.term_id == term_id, Document.course_id.in_(ids),
-                                             visible_docs(viewer_id))).all() if ids else []
+                                             visible_docs(viewer))).all() if ids else []
     by_course: dict[int, list[Document]] = {}
     for d in docs:
         by_course.setdefault(d.course_id, []).append(d)
