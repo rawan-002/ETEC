@@ -322,3 +322,86 @@ def test_ai_second_opinion_only_for_unsettled_files(client, db, monkeypatch):
     d = db.get(Document, doc_id)
     assert (d.component, d.status, d.classified_by, d.ai_input_tokens) == ("assessment", "classified", "ai", 1200)
     assert "التحليل الذكي" in d.reason
+
+
+# ---------- decision center ----------
+
+def _issue(title, quote, assignee="coordinator", document_id=None):
+    from app.services.decisions_ai import Evidence, Issue
+    return Issue(title_ar=title, description_ar="وصف", category="credit_hours", priority="high",
+                 evidence=[Evidence(document_id=document_id, quote=quote)],
+                 options_ar=["اعتماد الخطة", "تعديل الخطة"], assignee=assignee)
+
+
+def test_analysis_drops_issues_whose_quotes_are_not_in_the_files(monkeypatch):
+    from types import SimpleNamespace
+    from app.config import settings
+    from app.services import decisions_ai
+    result = decisions_ai.AnalysisResult(summary_ar="ملخص", issues=[
+        _issue("حقيقي", "Credit Hours: 4", document_id=7),
+        _issue("مختلق", "Credit Hours: 9", document_id=7),
+        _issue("من الخطة", "الساعات المعتمدة في الخطة الدراسية: 3"),
+    ])
+    fake_response = SimpleNamespace(parsed_output=result, stop_reason="end_turn",
+                                    usage=SimpleNamespace(input_tokens=10, output_tokens=5))
+    fake = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(parse=lambda **kw: fake_response)))
+    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
+    monkeypatch.setattr(decisions_ai, "_get_client", lambda: fake)
+    out, usage, error, _ = decisions_ai.analyse_course(
+        plan_facts="الساعات المعتمدة في الخطة الدراسية: 3", spec=(7, "spec.pdf", "Course Code CS1004  Credit   Hours: 4"),
+        others=[], open_titles=[])
+    assert error is None and [i.title_ar for i in out.issues] == ["حقيقي", "من الخطة"]
+
+
+def test_decision_center_flow(client, db, monkeypatch):
+    from app.config import settings
+    from app.models import Question
+    from app.services import decisions_ai
+
+    def fake_analysis(**kw):
+        sid = kw["spec"][0]
+        return (decisions_ai.AnalysisResult(summary_ar="رُصدت مسألتان", issues=[
+            _issue("تعارض الساعات", "Credit Hours: 4", document_id=sid),
+            _issue("رمز المقرر في الخطة", "الساعات المعتمدة في الخطة الدراسية: 3", assignee="head"),
+        ]), decisions_ai.Usage(input_tokens=5000, output_tokens=400), None, {sid: "توصيف المقرر", None: "الخطة الدراسية"})
+
+    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
+    monkeypatch.setattr(decisions_ai, "analyse_course", fake_analysis)
+    monkeypatch.setattr(decisions_ai, "ask_assistant",
+                        lambda **kw: ("الخيار الأول يوافق الخطة.", decisions_ai.Usage(input_tokens=900, output_tokens=30), None))
+    c = course(db, "CS1004")
+    login(client, db, "أستاذ أ")
+    select(client, [{"course_id": c.id, "is_coordinator": True}])
+    # Uploading a specification starts the analysis by itself.
+    upload(client, c.id, "spec.docx", docx_bytes("Course Specifications\nCourse Learning Outcomes\nCredit Hours: 4"), "spec")
+    mine = client.get("/api/questions").json()
+    # The coordinator sees both questions on the course; only the course-file one is theirs to decide.
+    assert {q["title"]: q["assigned_to_me"] for q in mine} == {"تعارض الساعات": True, "رمز المقرر في الخطة": False}
+    qid = next(q["id"] for q in mine if q["assigned_to_me"])
+    assert client.get("/api/questions/count").json()["pending_for_me"] == 1
+    detail = client.get(f"/api/questions/{qid}").json()
+    assert detail["can_decide"] and detail["evidence"][0]["filename"] == "spec.docx"
+
+    assert client.post(f"/api/questions/{qid}/ask", json={"message": "أي خيار أنسب؟"}).json()["answer"]
+    assert client.post(f"/api/questions/{qid}/decide", json={}).status_code == 422
+    assert client.post(f"/api/questions/{qid}/decide", json={"option": 0}).status_code == 200
+    roles = [m["role"] for m in client.get(f"/api/questions/{qid}").json()["messages"]]
+    assert roles == ["event", "user", "assistant", "event"]
+    assert client.get(f"/api/questions/{qid}").json()["can_decide"] is False
+
+    # Another member does not see the course's questions; the head sees both, one assigned to him.
+    login(client, db, "أستاذ ب")
+    assert client.get("/api/questions").json() == []
+    assert client.get(f"/api/questions/{qid}").status_code == 404
+    login(client, db, "رئيس CS")
+    head_q = {q["title"]: q for q in client.get("/api/questions").json()}
+    assert head_q["رمز المقرر في الخطة"]["assigned_to_me"]
+    hid = head_q["رمز المقرر في الخطة"]["id"]
+    targets = client.get(f"/api/questions/{hid}").json()["escalation_targets"]
+    assert [t["role"] for t in targets] == ["عميد الكلية"]
+    assert client.post(f"/api/questions/{hid}/escalate", json={"to_user_id": targets[0]["id"]}).status_code == 200
+    db.expire_all()
+    assert db.get(Question, hid).assignee.name == "العميد"
+    login(client, db, "العميد", "123456")
+    assert client.post(f"/api/questions/{hid}/defer", json={"note": "بعد اجتماع اللجنة"}).status_code == 200
+    assert client.get(f"/api/questions/{hid}").json()["status"] == "deferred"

@@ -59,6 +59,10 @@ def process_document(doc_id: int, component_hint: str | None = None) -> None:
             return
         _process(db, doc, component_hint)
         db.commit()
+        if doc.component == SPEC and doc.status == "classified":
+            # A new specification starts the consistency analysis for the decision center.
+            from .decisions import queue_analysis
+            queue_analysis(db, doc.course, doc.term_id, doc.uploader, sandbox=doc.sandbox)
     finally:
         db.close()
 

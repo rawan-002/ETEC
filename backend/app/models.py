@@ -195,3 +195,69 @@ class ActivityEvent(Base):
     sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
 
     actor: Mapped[User | None] = relationship()
+
+
+# ---------- Decision center ----------
+
+PRIORITIES = ("high", "medium", "low")
+
+
+class Question(Base):
+    """A document inconsistency that needs a human decision, raised by the analysis."""
+    __tablename__ = "questions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    term_id: Mapped[int] = mapped_column(ForeignKey("terms.id"))
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"))
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(10), default="medium")
+    category: Mapped[str] = mapped_column(String(40))
+    evidence_json: Mapped[str] = mapped_column(Text, default="[]")  # [{"document_id", "source", "quote"}]
+    options_json: Mapped[str] = mapped_column(Text, default="[]")  # ["option", ...]
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    # pending -> approved | deferred ; escalation keeps it pending with a new assignee
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    decision: Mapped[str | None] = mapped_column(Text)
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalations: Mapped[int] = mapped_column(Integer, default=0)
+    sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+
+    course: Mapped[Course] = relationship()
+    assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id])
+
+
+class QuestionMessage(Base):
+    """The question's history: assistant chat turns and decision events, in order."""
+    __tablename__ = "question_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    role: Mapped[str] = mapped_column(String(20))  # user, assistant, event
+    content: Mapped[str] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+
+    user: Mapped[User | None] = relationship()
+
+
+class CourseAnalysis(Base):
+    """One run of the consistency analysis for a course (what was read, what it cost)."""
+    __tablename__ = "course_analyses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    term_id: Mapped[int] = mapped_column(ForeignKey("terms.id"))
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"))
+    requested_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running, done, error
+    summary: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    questions_created: Mapped[int] = mapped_column(Integer, default=0)
+    sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0)

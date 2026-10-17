@@ -180,6 +180,13 @@ def notifications(user: User = Depends(current_user), db: Session = Depends(get_
             for n in db.scalars(q)]
 
 
+@router.get("/notifications/unread")
+def unread(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    n = db.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == user.id,
+                                                                       Notification.read_at.is_(None)))
+    return {"unread": n or 0}
+
+
 @router.post("/notifications/read")
 def mark_read(user: User = Depends(current_user), db: Session = Depends(get_db)):
     for n in db.scalars(select(Notification).where(Notification.user_id == user.id, Notification.read_at.is_(None))):

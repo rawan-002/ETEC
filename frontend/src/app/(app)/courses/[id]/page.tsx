@@ -1,10 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { use, useRef, useState } from "react";
+import { FileCheck2, FileClock, FileMinus2, FileX2, Sparkles } from "lucide-react";
 import { ErrorNote, Progress, Spinner, StatusPill } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 import { DOC_STATUS, fmtDate, fmtSize, levelLabel } from "@/lib/labels";
-import type { ComponentKey, CourseDetail, Doc } from "@/lib/types";
+import type { ComponentKey, ComponentStatus, CourseDetail, Doc, QuestionSummary } from "@/lib/types";
+
+const CARD_TONE: Record<ComponentStatus, { cls: string; icon: typeof FileCheck2; iconCls: string }> = {
+  present: { cls: "border-line", icon: FileCheck2, iconCls: "text-leaf" },
+  missing: { cls: "border-red-200 bg-red-50/40", icon: FileX2, iconCls: "text-red-600" },
+  review: { cls: "border-amber-200", icon: FileClock, iconCls: "text-amber-600" },
+  na: { cls: "border-line bg-canvas/60", icon: FileMinus2, iconCls: "text-ink-faint" },
+};
 
 const HELP: Record<ComponentKey, string> = {
   spec: "توصيف المقرر المعتمد (نموذج TP-153 أو T-104)",
@@ -79,6 +88,8 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
         <div className="mt-3"><ErrorNote message={error} /></div>
       </div>
 
+      <AnalysisPanel courseId={c.id} hasSpec={(c.components ?? []).some((s) => s.component === "spec" && s.status === "present")} />
+
       {c.findings.length > 0 && (
         <div className="card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <div className="font-semibold">ملاحظات على الوثائق</div>
@@ -114,9 +125,12 @@ function ComponentCard({ k, label, status, note, docs, canUpload, busy, onUpload
   practical?: { value: string; set: (v: string) => void };
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const [all, setAll] = useState(false);
+  const tone = CARD_TONE[status];
   return (
-    <section className="card p-5">
+    <section className={`rounded-2xl border bg-white p-5 shadow-card ${tone.cls}`}>
       <div className="flex items-center gap-2">
+        <tone.icon size={18} className={tone.iconCls} />
         <h2 className="font-bold text-navy">{label}</h2>
         <StatusPill status={status} />
         {canUpload && status !== "na" && (
@@ -139,7 +153,61 @@ function ComponentCard({ k, label, status, note, docs, canUpload, busy, onUpload
           </select>
         </div>
       )}
-      <DocList docs={docs} />
+      <DocList docs={all ? docs : docs.slice(0, 4)} />
+      {docs.length > 4 && (
+        <button className="mt-2 text-xs text-royal" onClick={() => setAll((v) => !v)}>{all ? "عرض أقل" : `عرض كل الملفات (${docs.length})`}</button>
+      )}
+    </section>
+  );
+}
+
+interface AnalysisState {
+  enabled: boolean;
+  can_run: boolean;
+  run: { status: "running" | "done" | "error"; summary: string | null; error: string | null; questions_created: number; finished_at: string | null } | null;
+  questions: QuestionSummary[];
+}
+
+function AnalysisPanel({ courseId, hasSpec }: { courseId: number; hasSpec: boolean }) {
+  const { data, reload } = useApi<AnalysisState>(`/api/courses/${courseId}/analysis`, 6000);
+  const [err, setErr] = useState<string | null>(null);
+  if (!data || !data.enabled) return null;
+  const running = data.run?.status === "running";
+  const start = async () => {
+    setErr(null);
+    try { await api(`/api/courses/${courseId}/analyze`, { method: "POST" }); await reload(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "تعذّر بدء التحليل"); }
+  };
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Sparkles size={18} className="text-sky" />
+        <h2 className="font-bold text-navy">التحليل الذكي لملف المقرر</h2>
+        {data.can_run && hasSpec && (
+          <button className="btn-ghost mr-auto px-3 py-1.5" disabled={running} onClick={start}>
+            {running ? "جارٍ التحليل…" : data.run ? "إعادة التحليل" : "تحليل ملف المقرر"}
+          </button>
+        )}
+      </div>
+      <p className="mt-2 text-sm text-ink-soft">
+        {running ? "يقرأ التحليل الذكي التوصيف والوثائق ويقارنها بالخطة الدراسية. يستغرق عادةً أقل من دقيقة."
+          : data.run?.status === "error" ? data.run.error
+          : data.run?.summary ?? (hasSpec ? "لم يُحلَّل ملف المقرر بعد." : "يبدأ التحليل تلقائيًا بعد رفع توصيف المقرر.")}
+      </p>
+      <ErrorNote message={err} />
+      {data.questions.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {data.questions.map((q) => (
+            <li key={q.id}>
+              <Link href={`/decisions?q=${q.id}`} className="flex items-center gap-3 rounded-xl bg-canvas px-3 py-2.5 text-sm hover:bg-royal-50">
+                <span className="flex-1">{q.title}</span>
+                <span className="text-xs text-ink-faint">{q.assigned_to_me ? "مُسند إليك" : q.assignee}</span>
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{q.status_ar}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from .config import settings
 from .db import SessionLocal, create_schema
-from .routers import auth, courses, management
+from .routers import auth, courses, decisions, management
 from .services import settings_store
 from .services.reminders import run_reminders
 
@@ -40,6 +40,7 @@ app = FastAPI(title="منصة الجودة الأكاديمية الذكية", l
 app.include_router(auth.router)
 app.include_router(courses.router)
 app.include_router(management.router)
+app.include_router(decisions.router)
 
 
 @app.get("/api/health")

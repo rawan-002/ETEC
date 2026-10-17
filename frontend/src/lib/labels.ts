@@ -31,6 +31,7 @@ export const KIND_AR: Record<string, string> = {
   assignment: "توزيع المقررات",
   approval: "اعتمادات",
   reminder: "تذكيرات",
+  decision: "مركز القرارات",
   admin: "إدارة",
 };
 

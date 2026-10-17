@@ -79,3 +79,31 @@ export interface ProgramSummary {
   distribution_approved: boolean;
   courses: Course[];
 }
+
+export type Priority = "high" | "medium" | "low";
+
+export interface QuestionSummary {
+  id: number;
+  title: string;
+  priority: Priority;
+  category: string;
+  status: "pending" | "approved" | "deferred";
+  status_ar: string;
+  escalations: number;
+  course: { id: number; code: string; title: string };
+  assignee: string | null;
+  assigned_to_me: boolean;
+  created_at: string;
+}
+
+export interface QuestionDetail extends QuestionSummary {
+  description: string;
+  options: string[];
+  evidence: { document_id: number | null; source: string; quote: string; filename: string | null }[];
+  decision: string | null;
+  decided_at: string | null;
+  can_decide: boolean;
+  escalation_targets: { id: number; name: string; role: string }[];
+  assistant_enabled: boolean;
+  messages: { id: number; role: "user" | "assistant" | "event"; content: string; at: string; user: string | null }[];
+}
