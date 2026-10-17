@@ -18,7 +18,7 @@
 cd backend
 python -m venv .venv && .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\python -m app.cli init "<مسار>\المستخدمون_وتوزيع_المقررات_v3.xlsx"
-.venv\Scripts\python -m app.cli set-password "نزار حسن محمد الشريف"
+.venv\Scripts\python -m app.cli set-password "<اسم العميد>"
 .venv\Scripts\python -m app.cli add-tester "<الاسم>" <البريد>   # حساب تجريبي معزول، يدخل مباشرة بإدخال بريده
 .venv\Scripts\python -m uvicorn app.main:app --port 8000
 
@@ -35,7 +35,7 @@ npm install && npm run build && npx next start -p 3000
 cp .env.example .env   # عبّئ كلمات المرور والمفتاح السري
 docker compose up -d --build
 docker compose exec backend python -m app.cli init /path/to/users.xlsx
-docker compose exec backend python -m app.cli set-password "نزار حسن محمد الشريف"
+docker compose exec backend python -m app.cli set-password "<اسم العميد>"
 ```
 
 ## الاختبارات
