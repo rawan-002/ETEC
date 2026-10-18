@@ -1,6 +1,6 @@
 """Admin commands:
   python -m app.cli init <users.xlsx>      create tables, load the CS plan, departments, term and users
-  python -m app.cli set-password "<name>"  set a sign-in password (prompted, not echoed); needed for the dean
+  python -m app.cli set-password "<name or email>"  set a sign-in password (prompted, not echoed); needed for the dean
   python -m app.cli add-team "<name>"      add a project-team member to the pilot
   python -m app.cli add-tester "<name>" <email>   sandboxed tester; entering this email signs in directly
   python -m app.cli remind                 run the reminder job once
@@ -35,7 +35,9 @@ def main(argv: list[str]) -> None:
             if args:
                 print("users:", import_users_workbook(db, args[0]))
         elif cmd == "set-password":
-            user = db.scalar(select(User).where(User.name == args[0]))
+            # An email also works: Windows consoles can reverse Arabic text typed or pasted into them.
+            key = args[0].strip()
+            user = db.scalar(select(User).where(User.email == key.lower() if "@" in key else User.name == key))
             if not user:
                 sys.exit(f"no user named {args[0]!r}")
             pw = getpass.getpass("Password (8+ characters): ")
