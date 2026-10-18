@@ -38,6 +38,13 @@ docker compose exec backend python -m app.cli init /path/to/users.xlsx
 docker compose exec backend python -m app.cli set-password "<اسم العميد>"
 ```
 
+## الاستضافة السحابية (Neon + Render + Vercel + Cloudflare R2)
+- **قاعدة البيانات — Neon:** رابط الاتصال المباشر (بدون `-pooler`) في `AQ_DATABASE_URL`. نقل قاعدة محلية إليها: `python -m app.cli copy-from-sqlite`.
+- **الملفات — Cloudflare R2:** حاوية `aq-documents` ومفتاح API بصلاحية قراءة وكتابة. نقل الملفات المحلية إليها (بعد ضبط `AQ_STORAGE_BACKEND=s3` و`AQ_S3_*` محليًا): `python -m app.cli copy-files`.
+- **الخادم الخلفي — Render:** New ← Blueprint ← هذا المستودع؛ يقرأ `render.yaml` ويطلب القيم السرية.
+- **الواجهة — Vercel:** استيراد المستودع، Root Directory = `frontend`، ومتغير `BACKEND_URL` = رابط Render.
+- كل `git push` إلى `main` يعيد نشر Render وVercel تلقائيًا.
+
 ## الاختبارات
 ```bash
 cd backend && .venv\Scripts\python -m pytest -q

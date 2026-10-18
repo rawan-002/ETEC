@@ -4,13 +4,16 @@
   python -m app.cli add-team "<name>"      add a project-team member to the pilot
   python -m app.cli add-tester "<name>" <email>   sandboxed tester; entering this email signs in directly
   python -m app.cli remind                 run the reminder job once
+  python -m app.cli copy-from-sqlite [data\\aq.db]   copy a local SQLite database into the configured (empty) database
+  python -m app.cli copy-files [data\\files]          upload locally stored files to the configured S3/R2 storage
 """
 import getpass
 import sys
+from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import create_engine, func, select, text
 
-from .db import SessionLocal, create_schema
+from .db import Base, SessionLocal, create_schema, engine
 from .models import FACULTY, TEAM, User
 from .security import hash_pin
 from .seed_data import import_users_workbook, seed_departments, seed_plan, seed_term
@@ -54,12 +57,54 @@ def main(argv: list[str]) -> None:
             print("tester:", user.name)
         elif cmd == "remind":
             print(run_reminders(db))
+        elif cmd == "copy-from-sqlite":
+            copy_from_sqlite(Path(args[0]) if args else Path(__file__).resolve().parent.parent / "data" / "aq.db")
+        elif cmd == "copy-files":
+            copy_files(Path(args[0]) if args else Path(__file__).resolve().parent.parent / "data" / "files")
         else:
             print(__doc__)
             return
         db.commit()
     finally:
         db.close()
+
+
+def copy_from_sqlite(src_path: Path) -> None:
+    """Row-for-row copy, parents before children; ids are kept so links between tables survive."""
+    if not src_path.exists():
+        sys.exit(f"no such file: {src_path}")
+    src = create_engine(f"sqlite:///{src_path}")
+    if engine.url.drivername.startswith("sqlite") and Path(engine.url.database).resolve() == src_path.resolve():
+        sys.exit("the configured database is the source itself; set AQ_DATABASE_URL to the target first")
+    tables = Base.metadata.sorted_tables
+    with engine.connect() as dst:
+        if any(dst.scalar(select(func.count()).select_from(t)) for t in tables):
+            sys.exit("the target database already has data; copy only into an empty database")
+    with src.connect() as s, engine.begin() as dst:
+        for t in tables:
+            rows = [dict(r._mapping) for r in s.execute(select(t))]
+            if rows:
+                dst.execute(t.insert(), rows)
+            print(f"{t.name}: {len(rows)}")
+        if engine.dialect.name == "postgresql":
+            # Rows were inserted with explicit ids, so move each id sequence past the highest copied id.
+            for t in tables:
+                if "id" in t.c:
+                    dst.execute(text(f"SELECT setval(pg_get_serial_sequence('{t.name}', 'id'), "
+                                     f"COALESCE((SELECT MAX(id) FROM {t.name}), 0) + 1, false)"))
+
+
+def copy_files(root: Path) -> None:
+    """Keys are the paths under data/files (content-addressed), so the same key works in either store."""
+    from .config import settings
+    from .services.storage import storage
+
+    if settings.storage_backend != "s3":
+        sys.exit("set AQ_STORAGE_BACKEND=s3 and the AQ_S3_* settings first")
+    paths = [p for p in root.rglob("*") if p.is_file()]
+    for i, p in enumerate(paths, 1):
+        storage.put(p.relative_to(root).as_posix(), p.read_bytes())
+        print(f"{i}/{len(paths)} {p.relative_to(root).as_posix()}")
 
 
 if __name__ == "__main__":

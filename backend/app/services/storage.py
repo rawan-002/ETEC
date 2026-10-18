@@ -31,10 +31,15 @@ class S3Storage:
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
         )
+        from botocore.exceptions import ClientError
+
         try:
             self.client.head_bucket(Bucket=self.bucket)
-        except Exception:
-            self.client.create_bucket(Bucket=self.bucket)
+        except ClientError as e:
+            # Create only when the bucket is missing; hosted stores (e.g. Cloudflare R2) often give
+            # object-only tokens that may not check or create buckets.
+            if e.response.get("Error", {}).get("Code") in ("404", "NoSuchBucket"):
+                self.client.create_bucket(Bucket=self.bucket)
 
     def put(self, key: str, data: bytes) -> None:
         self.client.put_object(Bucket=self.bucket, Key=key, Body=data)

@@ -1,0 +1,41 @@
+# Backend on Render (Blueprint). The frontend goes on Vercel, the database on Neon, files on Cloudflare R2.
+# Secrets are marked sync: false, so Render asks for them in the dashboard and they never live in the repo.
+services:
+  - type: web
+    name: aq-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: AQ_STORAGE_BACKEND
+        value: s3
+      - key: AQ_S3_BUCKET
+        value: aq-documents
+      - key: AQ_SECRET_KEY
+        generateValue: true
+      - key: AQ_DATABASE_URL       # Neon connection string (direct, not -pooler)
+        sync: false
+      - key: AQ_S3_ENDPOINT        # https://<account id>.r2.cloudflarestorage.com
+        sync: false
+      - key: AQ_S3_ACCESS_KEY
+        sync: false
+      - key: AQ_S3_SECRET_KEY
+        sync: false
+      - key: AQ_FRONTEND_ORIGIN    # the Vercel address, e.g. https://aq-platform.vercel.app
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AQ_SMTP_HOST
+        sync: false
+      - key: AQ_SMTP_USER
+        sync: false
+      - key: AQ_SMTP_PASSWORD
+        sync: false
+      - key: AQ_SMTP_FROM
+        sync: false
