@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpLeft, CheckCircle2, FileText, Send, Sparkles } from "lucide-react";
+import { ArrowUpLeft, CheckCircle2, ChevronLeft, FileText, Send, Sparkles } from "lucide-react";
+import { IssueChat } from "@/components/decisions/IssueChat";
+import { useMe } from "@/components/Shell";
 import { Empty, ErrorNote, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 import { fmtDate } from "@/lib/labels";
@@ -19,7 +21,7 @@ const STATUS_CLS: Record<string, string> = {
   approved: "bg-leaf-50 text-leaf",
   deferred: "bg-slate-100 text-ink-soft",
 };
-const QUICK = ["لماذا ظهرت هذه المسألة؟", "ما الخيار الأنسب وفق الأدلة؟", "ما أثر كل خيار على ملف المقرر؟"];
+const QUICK = ["لماذا ظهرت هذه المسألة؟", "ما الخيار الأنسب وفق الأدلة؟", "ما أثر كل خيار على ملف المقرر؟", "وضّح لي الأدلة المقتبسة", "أعد صياغة الخيارات بلغة أبسط"];
 
 export default function DecisionsPage() {
   return <Suspense fallback={<Spinner />}><Decisions /></Suspense>;
@@ -28,11 +30,12 @@ export default function DecisionsPage() {
 function Decisions() {
   const params = useSearchParams();
   const { data: list, reload } = useApi<QuestionSummary[]>("/api/questions", 20000);
-  const [tab, setTab] = useState<"mine" | "open" | "done">("mine");
+  const [tab, setTab] = useState<"mine" | "open" | "deferred" | "done">("mine");
   const [selected, setSelected] = useState<number | null>(params.get("q") ? Number(params.get("q")) : null);
 
   const shown = useMemo(() => (list ?? []).filter((q) =>
-    tab === "mine" ? q.assigned_to_me && q.status !== "approved" : tab === "open" ? q.status !== "approved" : q.status === "approved"),
+    tab === "mine" ? q.assigned_to_me && q.status !== "approved" : tab === "open" ? q.status !== "approved"
+      : tab === "deferred" ? q.status === "deferred" : q.status === "approved"),
   [list, tab]);
 
   useEffect(() => {
@@ -43,8 +46,10 @@ function Decisions() {
   const counts = {
     mine: list.filter((q) => q.assigned_to_me && q.status !== "approved").length,
     open: list.filter((q) => q.status !== "approved").length,
+    deferred: list.filter((q) => q.status === "deferred").length,
     done: list.filter((q) => q.status === "approved").length,
   };
+  const awaitingMe = list.filter((q) => q.assigned_to_me && q.status === "pending").length;
 
   return (
     <div className="space-y-6">
@@ -52,6 +57,11 @@ function Decisions() {
         <h1 className="h-page text-3xl">مركز القرارات الذكي</h1>
         <p className="muted mt-2">يحلّل التحليل الذكي ملفات المقررات، ويولّد سؤالًا عند رصد تعارض يتطلب قرارًا بشريًا، ويُسنده لصاحب الصلاحية مع الأدلة.</p>
       </div>
+      {awaitingMe > 0 && (
+        <button onClick={() => setTab("mine")} className="card flex w-full items-center justify-between border-amber-200 bg-amber-50 p-4 text-right text-sm text-amber-800">
+          <span><b>{awaitingMe}</b> {awaitingMe === 1 ? "قرار ينتظر" : "قرارات تنتظر"} اعتمادك الصريح. لا يُنفَّذ أي قرار قبل اعتماده.</span><span>←</span>
+        </button>
+      )}
 
       {list.length === 0 ? (
         <Empty>لا توجد مسائل بعد. تُرصد المسائل تلقائيًا عند رفع توصيف المقرر، أو بزر «تحليل ملف المقرر» في صفحة المقرر.</Empty>
@@ -59,7 +69,7 @@ function Decisions() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <section className="space-y-3">
             <div className="flex gap-1 rounded-xl bg-white p-1 text-sm shadow-card">
-              {([["mine", "بانتظاري"], ["open", "المفتوحة"], ["done", "المحسومة"]] as const).map(([k, l]) => (
+              {([["mine", "بانتظاري"], ["open", "المفتوحة"], ["deferred", "المؤجلة"], ["done", "المحسومة"]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setTab(k)}
                   className={`flex-1 rounded-lg px-3 py-1.5 ${tab === k ? "bg-navy font-semibold text-white" : "text-ink-soft hover:bg-canvas"}`}>
                   {l} <span className="opacity-70">({counts[k]})</span>
@@ -98,6 +108,8 @@ function QuestionView({ id, onChange }: { id: number; onChange: () => void }) {
   const [escalating, setEscalating] = useState(false);
   const [target, setTarget] = useState<number | "">("");
   const [note, setNote] = useState("");
+  const [deferring, setDeferring] = useState(false);
+  const [deferNote, setDeferNote] = useState("");
 
   if (error) return <ErrorNote message={error} />;
   if (!q) return <Spinner />;
@@ -108,6 +120,8 @@ function QuestionView({ id, onChange }: { id: number; onChange: () => void }) {
     try {
       await api(`/api/questions/${q.id}/${path}`, { method: "POST", json });
       setEscalating(false);
+      setDeferring(false);
+      setDeferNote("");
       await reload();
       onChange();
     } catch (e) {
@@ -145,7 +159,9 @@ function QuestionView({ id, onChange }: { id: number; onChange: () => void }) {
         </ul>
       </div>
 
-      <div className="card p-6">
+      <EscalationPath q={q} />
+
+      <div id="decision-box" className="card p-6">
         <h3 className="font-bold text-navy">القرار</h3>
         {q.status === "approved" ? (
           <div className="mt-3 flex items-start gap-3 rounded-xl bg-leaf-50 p-4 text-sm text-leaf">
@@ -170,11 +186,20 @@ function QuestionView({ id, onChange }: { id: number; onChange: () => void }) {
             ))}
             <textarea className="input min-h-20" placeholder="أو اكتب إجابة مخصصة…" value={custom} onChange={(e) => setCustom(e.target.value)} />
             <ErrorNote message={err} />
-            {!escalating ? (
+            {deferring ? (
+              <div className="space-y-3 rounded-xl border border-line bg-canvas p-4">
+                <div className="text-sm font-semibold text-navy">تأجيل القرار</div>
+                <input className="input" maxLength={1000} placeholder="سبب التأجيل (يُسجَّل في سجل المسألة)" value={deferNote} onChange={(e) => setDeferNote(e.target.value)} />
+                <div className="flex gap-2">
+                  <button className="btn-primary" disabled={busy || !deferNote.trim()} onClick={() => act("defer", { note: deferNote })}>تأكيد التأجيل</button>
+                  <button className="btn-ghost" onClick={() => setDeferring(false)}>إلغاء</button>
+                </div>
+              </div>
+            ) : !escalating ? (
               <div className="flex flex-wrap gap-2">
                 <button className="btn-primary" disabled={busy || (option === null && !custom.trim())}
                   onClick={() => act("decide", custom.trim() ? { custom } : { option })}>اعتماد القرار</button>
-                {q.status === "pending" && <button className="btn-ghost" disabled={busy} onClick={() => act("defer", {})}>تأجيل</button>}
+                {q.status === "pending" && <button className="btn-ghost" disabled={busy} onClick={() => setDeferring(true)}>تأجيل</button>}
                 {q.escalation_targets.length > 0 && <button className="btn-danger" disabled={busy} onClick={() => setEscalating(true)}>تصعيد</button>}
               </div>
             ) : (
@@ -182,7 +207,9 @@ function QuestionView({ id, onChange }: { id: number; onChange: () => void }) {
                 <div className="text-sm font-semibold text-red-800">تصعيد المسألة إلى</div>
                 <select className="input" value={target} onChange={(e) => setTarget(Number(e.target.value))}>
                   <option value="">اختر المسؤول</option>
-                  {q.escalation_targets.map((t) => <option key={t.id} value={t.id}>{t.name} — {t.role}</option>)}
+                  {q.escalation_targets.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} — {t.role}{nextLevel(q) === t.role ? " (المستوى التالي)" : ""}</option>
+                  ))}
                 </select>
                 <input className="input" placeholder="ملاحظة (اختياري)" value={note} onChange={(e) => setNote(e.target.value)} />
                 <div className="flex gap-2">
@@ -200,8 +227,45 @@ function QuestionView({ id, onChange }: { id: number; onChange: () => void }) {
         )}
       </div>
 
-      {q.assistant_enabled && <Assistant q={q} onAnswer={reload} />}
+      <IssueChat q={q} onAsked={reload}>{q.assistant_enabled && <Assistant q={q} onAnswer={reload} />}</IssueChat>
     </section>
+  );
+}
+
+const CHAIN = ["منسق المقرر", "رئيس القسم", "عميد الكلية"] as const;
+
+/** The next level in the required chain, matched against the backend's escalation target roles. */
+function nextLevel(q: QuestionDetail): string | null {
+  const roles = q.escalation_targets.map((t) => t.role);
+  return roles.includes("رئيس القسم") ? "رئيس القسم" : roles.includes("عميد الكلية") ? "عميد الكلية" : null;
+}
+
+/** The intended chain coordinator → head → dean, the current holder, and an honest note where the backend differs. */
+function EscalationPath({ q }: { q: QuestionDetail }) {
+  const me = useMe();
+  const level = q.assigned_to_me ? (me.role === "dean" ? 2 : me.role === "head" ? 1 : 0) : null;
+  const skips = level === 0 && q.escalation_targets.some((t) => t.role === "عميد الكلية") && q.escalation_targets.some((t) => t.role === "رئيس القسم");
+  return (
+    <div className="card p-5">
+      <h3 className="text-sm font-bold text-navy">تسلسل الاعتماد</h3>
+      <ol className="mt-3 flex flex-wrap items-center gap-1 text-xs">
+        {CHAIN.map((c, i) => (
+          <li key={c} className="flex items-center gap-1">
+            <span className={`rounded-full px-3 py-1 font-semibold ${level === i ? "bg-navy text-white" : "bg-canvas text-ink-soft"}`}>{c}</span>
+            {i < CHAIN.length - 1 && <ChevronLeft size={14} className="text-ink-faint" />}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-xs text-ink-soft">
+        المسؤول الحالي: <b>{q.assigned_to_me ? "أنت" : q.assignee ?? "غير محدد"}</b>
+        {q.escalations > 0 && ` · صُعّدت ${q.escalations} ${q.escalations === 1 ? "مرة" : "مرات"}`} · الحالة: {q.status_ar}
+      </p>
+      {skips && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+          ملاحظة: النظام الحالي يسمح للمنسق بالتصعيد مباشرة إلى العميد. التقيّد بالتسلسل (المنسق ← رئيس القسم ← العميد) فجوة مستقبلية في الخادم، ولم تتغير الصلاحيات الفعلية.
+        </p>
+      )}
+    </div>
   );
 }
 

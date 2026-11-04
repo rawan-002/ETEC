@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, useApi } from "@/lib/api";
+import { LangToggle } from "@/lib/i18n";
 
 interface Lookup { signed_in: boolean; name?: string; role_ar?: string; needs_setup?: boolean; can_self_setup?: boolean }
 interface Dept { id: number; name: string }
@@ -89,6 +90,7 @@ export default function LoginPage() {
 
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-md">
+          <div className="mb-4 flex justify-end"><LangToggle /></div>
           <div className="mb-8 font-bold text-navy lg:hidden">جودة أكاديمية ذكية</div>
           {registering ? <RegisterForm onDone={() => setRegistering(false)} /> : (
             <form className="card space-y-4 p-6" onSubmit={(e) => { e.preventDefault(); submit(); }}>

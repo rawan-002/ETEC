@@ -1,3 +1,4 @@
+import { getLang } from "./i18n/state";
 import type { ComponentStatus } from "./types";
 
 export const PROGRAM_AR: Record<string, string> = {
@@ -50,7 +51,7 @@ export function levelLabel(level: number | null, group: string | null): string {
 }
 
 export function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleString("ar-SA-u-ca-gregory", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(iso).toLocaleString(getLang() === "en" ? "en-GB" : "ar-SA-u-ca-gregory", { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function fmtSize(bytes: number): string {

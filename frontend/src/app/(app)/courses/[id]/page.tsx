@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useRef, useState } from "react";
 import { FileCheck2, FileClock, FileMinus2, FileX2, Sparkles } from "lucide-react";
+import { CourseQualityTools } from "@/components/courseTools/CourseQualityTools";
 import { ErrorNote, Progress, Spinner, StatusPill } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 import { DOC_STATUS, fmtDate, fmtSize, levelLabel } from "@/lib/labels";
@@ -89,6 +90,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
       </div>
 
       <AnalysisPanel courseId={c.id} hasSpec={(c.components ?? []).some((s) => s.component === "spec" && s.status === "present")} />
+      <CourseQualityTools c={c} />
 
       {c.findings.length > 0 && (
         <div className="card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">

@@ -4,11 +4,18 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import {
-  Bell, ClipboardCheck, FileSearch, History, KeyRound, LayoutGrid, ListChecks, LogOut, Mail, Menu, Scale, Users, X,
+  Bell, BellRing, ClipboardCheck, ClipboardPen, FileBarChart, FileDiff, FileSearch, History, KeyRound, LayoutGrid, LifeBuoy, ListChecks, LogOut, Mail, Menu, Scale, Users, X,
   type LucideIcon,
 } from "lucide-react";
 import { api, useApi } from "@/lib/api";
+import { LangToggle } from "@/lib/i18n";
+import { needsMyAction, useMissingData } from "@/lib/missingData";
+import { reportNeedsMe, useReports } from "@/lib/reports";
+import { editNeedsMe, useDocEdits } from "@/lib/docEdits";
+import { useMyWork } from "@/lib/work";
+import { unreadForTeam, useTickets } from "@/lib/support";
 import type { Me, Role } from "@/lib/types";
+import { SupportWidget } from "./support/SupportWidget";
 import { Spinner } from "./ui";
 
 const MeContext = createContext<Me | null>(null);
@@ -17,18 +24,28 @@ export const useMe = () => useContext(MeContext)!;
 const NAV: { href: string; label: string; icon: LucideIcon; roles: Role[]; badge?: boolean }[] = [
   { href: "/", label: "لوحة المتابعة", icon: LayoutGrid, roles: ["dean", "head", "faculty", "team"] },
   { href: "/decisions", label: "مركز القرارات الذكي", icon: Scale, roles: ["dean", "head", "faculty", "team"], badge: true },
+  { href: "/inbox", label: "الإشعارات والمهام", icon: BellRing, roles: ["dean", "head", "faculty", "team"], badge: true },
+  { href: "/missing-data", label: "استكمال البيانات الناقصة", icon: ClipboardPen, roles: ["dean", "head", "faculty", "team"], badge: true },
+  { href: "/reports", label: "تقارير تحليل الفجوات", icon: FileBarChart, roles: ["dean", "head", "faculty", "team"], badge: true },
+  { href: "/document-edits", label: "اقتراحات تعديل المستندات", icon: FileDiff, roles: ["dean", "head", "faculty", "team"], badge: true },
   { href: "/select-courses", label: "مقرراتي هذا الفصل", icon: ListChecks, roles: ["faculty", "head"] },
   { href: "/distribution", label: "توزيع المقررات", icon: ClipboardCheck, roles: ["head"] },
   { href: "/review", label: "مراجعة التصنيف", icon: FileSearch, roles: ["team", "dean"] },
   { href: "/notifications", label: "الإشعارات البريدية", icon: Mail, roles: ["dean", "head", "faculty", "team"] },
   { href: "/activity", label: "سجل النشاط", icon: History, roles: ["dean", "head", "faculty", "team"] },
   { href: "/users", label: "المستخدمون والصلاحيات", icon: Users, roles: ["dean", "team"] },
+  { href: "/support", label: "طلبات الدعم الفني", icon: LifeBuoy, roles: ["team"], badge: true },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const { data: me, error } = useApi<Me>("/api/auth/me");
   const { data: decisions } = useApi<{ pending_for_me: number }>(me ? "/api/questions/count" : null, 20000);
-  const { data: unread } = useApi<{ unread: number }>(me ? "/api/notifications/unread" : null, 30000);
+  const { tickets: supportTickets } = useTickets("all", me?.role === "team" ? me : null);
+  const { requests: mdRequests, viewer: mdViewer } = useMissingData(me);
+  const { reports, viewer: repViewer } = useReports(me);
+  const { proposals, viewer: editViewer } = useDocEdits(me);
+  // The bell now counts the unified notifications (real email reminders included) and opens the notification center.
+  const { unreadCount, tasks: myTasks } = useMyWork(me);
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -49,7 +66,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const nav = NAV.filter((n) => n.roles.includes(me.role));
   const pending = decisions?.pending_for_me ?? 0;
-  const unreadCount = unread?.unread ?? 0;
+  const supportNew = (supportTickets ?? []).filter(unreadForTeam).length;
+  const mdPending = mdViewer ? (mdRequests ?? []).filter((r) => needsMyAction(r, mdViewer)).length : 0;
+  const repPending = repViewer ? (reports ?? []).filter((r) => reportNeedsMe(r, repViewer)).length : 0;
+  const badges: Record<string, number> = { "/decisions": pending, "/support": supportNew, "/missing-data": mdPending, "/reports": repPending, "/inbox": myTasks.length,
+    "/document-edits": editViewer ? (proposals ?? []).filter((p) => editNeedsMe(p, editViewer)).length : 0 };
   return (
     <MeContext.Provider value={me}>
       <div className="min-h-screen lg:flex">
@@ -72,7 +93,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${active ? "bg-royal font-semibold text-white shadow-lg shadow-black/20" : "text-white/80 hover:bg-white/10"}`}>
                   <n.icon size={18} className="shrink-0" />
                   <span className="flex-1">{n.label}</span>
-                  {n.badge && pending > 0 && <span className="rounded-full bg-leaf px-2 py-0.5 text-xs font-bold text-white">{pending}</span>}
+                  {n.badge && (badges[n.href] ?? 0) > 0 && <span className="rounded-full bg-leaf px-2 py-0.5 text-xs font-bold text-white">{badges[n.href]}</span>}
                 </Link>
               );
             })}
@@ -90,7 +111,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <span className="h-2 w-2 animate-pulse rounded-full bg-leaf" />تحديث مباشر
             </div>
             <div className="mr-auto flex items-center gap-1">
-              <Link href="/notifications" className="relative rounded-full p-2 hover:bg-canvas" aria-label="الإشعارات">
+              <LangToggle className="me-1" />
+              <Link href="/inbox" className="relative rounded-full p-2 hover:bg-canvas" aria-label="الإشعارات">
                 <Bell size={20} />
                 {unreadCount > 0 && (
                   <span className="absolute -left-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{unreadCount}</span>
@@ -112,6 +134,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
           )}
           <main className="mx-auto max-w-6xl p-4 lg:p-8">{children}</main>
+          <SupportWidget />
         </div>
       </div>
     </MeContext.Provider>

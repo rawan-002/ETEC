@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Clock, FileWarning, Sparkles, type LucideIcon } from "lucide-react";
 import { useMe } from "@/components/Shell";
 import { ComponentRow, Empty, Progress, Spinner, StatusPill } from "@/components/ui";
+import { DashboardInsights } from "@/components/work/DashboardInsights";
 import { useApi } from "@/lib/api";
 import { fmtDate, levelLabel, PROGRAM_AR } from "@/lib/labels";
 import type { Course, ProgramSummary, QuestionSummary } from "@/lib/types";
@@ -156,6 +157,7 @@ function FacultyDashboard() {
         <StatCard icon={Clock} value={pending} label="قرارات بانتظاري" tone={pending ? "warn" : "good"} />
         <StatCard icon={FileWarning} value={courses.reduce((s, c) => s + (c.components ?? []).filter((x) => x.status === "missing").length, 0)} label="وثائق ناقصة" />
       </div>
+      <DashboardInsights />
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
@@ -231,6 +233,7 @@ function ProgramView({ p, reviewQueue, openQuestions, questions }: { p: ProgramS
         <StatCard icon={Clock} value={openQuestions} label="قرارات معلقة" tone={openQuestions ? "warn" : "good"} />
         <StatCard icon={FileWarning} value={p.missing_components} label="وثائق ناقصة" tone={p.missing_components ? "warn" : "good"} />
       </div>
+      <DashboardInsights />
       {(me.role === "team" || me.role === "dean") && reviewQueue > 0 && (
         <Link href="/review" className="card flex items-center justify-between border-amber-200 bg-amber-50 p-4 text-amber-800">
           <span>{reviewQueue} ملف بانتظار حسم فريق المشروع</span><span>←</span>

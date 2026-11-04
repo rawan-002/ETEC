@@ -18,3 +18,12 @@ body {
   .muted { @apply text-sm text-ink-soft; }
   .ltr { direction: ltr; unicode-bidi: isolate; }
 }
+
+/* English (LTR): the interface was written right-to-left with a few physical utilities; mirror those. */
+[dir="ltr"] .text-right { text-align: left; }
+[dir="ltr"] .mr-auto { margin-right: 0; margin-left: auto; }
+[dir="ltr"] .pr-5 { padding-right: 0; padding-left: 1.25rem; }
+[dir="ltr"] .pr-9 { padding-right: 0.75rem; padding-left: 2.25rem; }
+[dir="ltr"] .right-3 { right: auto; left: 0.75rem; }
+[dir="ltr"] .-scale-x-100 { --tw-scale-x: 1; }
+[dir="ltr"] .lucide-chevron-left, [dir="ltr"] .lucide-arrow-right, [dir="ltr"] .lucide-arrow-up-left { transform: scaleX(-1); }
