@@ -1,8 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Building2 } from "lucide-react";
+import { GuestSupport } from "@/components/support/GuestSupport";
 import { api, useApi } from "@/lib/api";
+import { chosenDepartment, COLLEGE_AR, departmentByCode, DEPARTMENTS, rememberDepartment, type Department } from "@/lib/departments";
 import { LangToggle } from "@/lib/i18n";
 
 interface Lookup { signed_in: boolean; name?: string; role_ar?: string; needs_setup?: boolean; can_self_setup?: boolean }
@@ -18,6 +22,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [registering, setRegistering] = useState(false);
+  // The department chosen on the home page (?dept=CS); a direct link to /login defaults to the first open department.
+  // This is interface only: the backend does not check the department at sign-in yet.
+  const [dept, setDept] = useState<Department | null>(null);
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("dept") ?? chosenDepartment();
+    const d = departmentByCode(code) ?? DEPARTMENTS.find((x) => x.active)!;
+    setDept(d);
+    if (d.active) rememberDepartment(d.code);
+  }, []);
 
   const lookup = async () => {
     const value = email.trim();
@@ -76,7 +89,7 @@ export default function LoginPage() {
       <section className="relative hidden overflow-hidden bg-navy p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div>
           <div className="text-lg font-bold">جامعة الباحة</div>
-          <div className="text-sm text-white/70">كلية الحاسبات والمعلومات</div>
+          <div className="text-sm text-white/70">{COLLEGE_AR}</div>
         </div>
         <div>
           <h1 className="text-4xl font-bold leading-tight">معًا نحو كلية أكثر تميزًا</h1>
@@ -84,15 +97,33 @@ export default function LoginPage() {
             نرتقي بجودة برامجنا الأكاديمية من خلال التحليل الذكي، والتعاون الفعّال، والتحسين المستمر.
           </p>
         </div>
-        <div className="text-xs text-white/50">التجربة الأولى · قسم علوم الحاسب</div>
+        <div className="text-xs text-white/50">{dept ? `قسم ${dept.nameAr}` : COLLEGE_AR}</div>
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-sky/20 blur-2xl" />
       </section>
 
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-md">
-          <div className="mb-4 flex justify-end"><LangToggle /></div>
+          <div className="mb-4 flex items-center gap-2">
+            <Link href="/home" className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-semibold text-royal hover:bg-royal-50">
+              <ArrowRight size={16} />العودة إلى الصفحة الرئيسية
+            </Link>
+            <LangToggle className="ms-auto" />
+          </div>
+          {dept && (
+            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-line bg-white px-4 py-3 text-sm shadow-card">
+              <Building2 size={18} className="shrink-0 text-royal" />
+              <span className="flex-1">القسم المختار: <b>{`قسم ${dept.nameAr}`}</b></span>
+              <Link href="/home#departments" className="text-xs font-semibold text-royal hover:underline">تغيير القسم</Link>
+            </div>
+          )}
           <div className="mb-8 font-bold text-navy lg:hidden">جودة أكاديمية ذكية</div>
-          {registering ? <RegisterForm onDone={() => setRegistering(false)} /> : (
+          {dept && !dept.active ? (
+            <div className="card space-y-3 p-6 text-center">
+              <h2 className="text-lg font-bold text-navy">{`قسم ${dept.nameAr}`}</h2>
+              <p className="muted">هذا القسم غير متاح حاليًا على المنصة، وسيُفعَّل قريبًا.</p>
+              <Link href="/home#departments" className="btn-primary">العودة لاختيار القسم</Link>
+            </div>
+          ) : registering ? <RegisterForm onDone={() => setRegistering(false)} /> : (
             <form className="card space-y-4 p-6" onSubmit={(e) => { e.preventDefault(); submit(); }}>
               <div>
                 <h2 className="text-xl font-bold text-navy">تسجيل الدخول</h2>
@@ -149,6 +180,7 @@ export default function LoginPage() {
           )}
         </div>
       </section>
+      <GuestSupport onLoginPage />
     </div>
   );
 }

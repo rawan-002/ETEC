@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api, useApi } from "@/lib/api";
+import { COLLEGE_AR } from "@/lib/departments";
 import { LangToggle } from "@/lib/i18n";
 import { needsMyAction, useMissingData } from "@/lib/missingData";
 import { reportNeedsMe, useReports } from "@/lib/reports";
@@ -61,7 +62,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
+    // Back to the public home page (a full load, so "/" is served as the home page again).
+    window.location.href = "/home";
   };
 
   // Project-team tester accounts also get the support page (prototype only); other pages follow the real role.
@@ -101,7 +103,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="m-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-6 text-white/70">
             <div>الفصل الدراسي {me.term ?? "—"}</div>
-            <div>التجربة الأولى · قسم علوم الحاسب</div>
+            <div>{me.department ? `قسم ${me.department}` : COLLEGE_AR}</div>
           </div>
         </aside>
 

@@ -26,4 +26,4 @@ body {
 [dir="ltr"] .pr-9 { padding-right: 0.75rem; padding-left: 2.25rem; }
 [dir="ltr"] .right-3 { right: auto; left: 0.75rem; }
 [dir="ltr"] .-scale-x-100 { --tw-scale-x: 1; }
-[dir="ltr"] .lucide-chevron-left, [dir="ltr"] .lucide-arrow-right, [dir="ltr"] .lucide-arrow-up-left { transform: scaleX(-1); }
+[dir="ltr"] .lucide-chevron-left, [dir="ltr"] .lucide-arrow-right, [dir="ltr"] .lucide-arrow-left, [dir="ltr"] .lucide-arrow-up-left { transform: scaleX(-1); }

@@ -11,7 +11,7 @@ const arabic = IBM_Plex_Sans_Arabic({
 
 export const metadata: Metadata = {
   title: "جودة أكاديمية ذكية — جامعة الباحة",
-  description: "منصة متابعة اكتمال ملفات المقررات بكلية الحاسبات والمعلومات",
+  description: "منصة الجودة الأكاديمية الذكية — كلية الحاسبات وتقنية المعلومات بجامعة الباحة",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
