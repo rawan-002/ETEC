@@ -6,7 +6,7 @@ import { createDemoStore } from "@/lib/demo/store";
 import { canEdit, hasUpdate as mdHasUpdate, missingData, needsMyAction, STATUS_AR as MD_STATUS, useMissingData } from "@/lib/missingData";
 import { editHasUpdate, editNeedsMe, EDIT_STATUS_AR, useDocEdits, docEditService } from "@/lib/docEdits";
 import { reportHasUpdate, reportNeedsMe, reportService, STATUS_AR as REPORT_STATUS, useReports } from "@/lib/reports";
-import { CATEGORY_AR, support, unreadForTeam, unreadForUser, useTickets } from "@/lib/support";
+import { CATEGORY_AR, isProjectTeam, support, unreadForTeam, unreadForUser, useTickets } from "@/lib/support";
 import type { EditProposal, EditViewer } from "@/lib/docEdits";
 import type { MdViewer, MissingDataRequest } from "@/lib/missingData";
 import type { GapReport, ReportViewer } from "@/lib/reports";
@@ -124,7 +124,7 @@ export function useMyWork(me: Me | null) {
   const { reports, viewer: repViewer } = useReports(me);
   const { proposals, viewer: editViewer } = useDocEdits(me);
   const { tickets: myTickets } = useTickets("mine", me);
-  const { tickets: allTickets } = useTickets("all", me?.role === "team" ? me : null);
+  const { tickets: allTickets } = useTickets("all", isProjectTeam(me) ? me : null);
   const [readIds, setReadIds] = useState<string[]>([]);
 
   useEffect(() => {

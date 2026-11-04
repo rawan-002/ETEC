@@ -13,7 +13,7 @@ import { needsMyAction, useMissingData } from "@/lib/missingData";
 import { reportNeedsMe, useReports } from "@/lib/reports";
 import { editNeedsMe, useDocEdits } from "@/lib/docEdits";
 import { useMyWork } from "@/lib/work";
-import { unreadForTeam, useTickets } from "@/lib/support";
+import { isProjectTeam, unreadForTeam, useTickets } from "@/lib/support";
 import type { Me, Role } from "@/lib/types";
 import { SupportWidget } from "./support/SupportWidget";
 import { Spinner } from "./ui";
@@ -40,7 +40,7 @@ const NAV: { href: string; label: string; icon: LucideIcon; roles: Role[]; badge
 export function Shell({ children }: { children: React.ReactNode }) {
   const { data: me, error } = useApi<Me>("/api/auth/me");
   const { data: decisions } = useApi<{ pending_for_me: number }>(me ? "/api/questions/count" : null, 20000);
-  const { tickets: supportTickets } = useTickets("all", me?.role === "team" ? me : null);
+  const { tickets: supportTickets } = useTickets("all", isProjectTeam(me) ? me : null);
   const { requests: mdRequests, viewer: mdViewer } = useMissingData(me);
   const { reports, viewer: repViewer } = useReports(me);
   const { proposals, viewer: editViewer } = useDocEdits(me);
@@ -64,7 +64,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     router.replace("/login");
   };
 
-  const nav = NAV.filter((n) => n.roles.includes(me.role));
+  // Project-team tester accounts also get the support page (prototype only); other pages follow the real role.
+  const nav = NAV.filter((n) => n.roles.includes(me.role) || (n.href === "/support" && isProjectTeam(me)));
   const pending = decisions?.pending_for_me ?? 0;
   const supportNew = (supportTickets ?? []).filter(unreadForTeam).length;
   const mdPending = mdViewer ? (mdRequests ?? []).filter((r) => needsMyAction(r, mdViewer)).length : 0;

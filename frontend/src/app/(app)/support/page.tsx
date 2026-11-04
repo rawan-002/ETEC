@@ -6,14 +6,14 @@ import { AttachmentChip, DemoNotice, TicketStatusPill, TicketThread } from "@/co
 import { Empty, ErrorNote, Spinner } from "@/components/ui";
 import { fmtDate } from "@/lib/labels";
 import type { Ticket, TicketStatus } from "@/lib/support";
-import { actorFrom, CATEGORY_AR, STATUS_AR, support, unreadForTeam, useTickets } from "@/lib/support";
+import { actorFrom, CATEGORY_AR, isProjectTeam, STATUS_AR, support, unreadForTeam, useTickets } from "@/lib/support";
 
 type Filter = "all" | TicketStatus;
 
 export default function SupportRequestsPage() {
   const me = useMe();
   // The page is for the project team; the role comes from the server session, not from stored data.
-  if (me.role !== "team") return <Empty>هذه الصفحة لفريق المشروع.</Empty>;
+  if (!isProjectTeam(me)) return <Empty>هذه الصفحة لفريق المشروع.</Empty>;
   return <SupportRequests />;
 }
 

@@ -16,6 +16,10 @@ export const support: SupportService = mockSupportService;
 /** The prototype keeps requests in this browser only; the UI says so wherever requests are shown. */
 export const SUPPORT_IS_DEMO = true;
 
+/** The project team: the "team" role, or a project-team tester account (sandboxed faculty in the backend).
+ *  Used only for the prototype support pages; real permissions stay with the backend. */
+export const isProjectTeam = (me: Me | null) => !!me && (me.role === "team" || me.is_tester);
+
 export function actorFrom(me: Me): SupportActor {
   return { id: me.id, name: me.name, roleAr: me.role_ar };
 }

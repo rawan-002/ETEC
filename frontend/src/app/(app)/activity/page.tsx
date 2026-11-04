@@ -11,7 +11,7 @@ import { useDocEdits } from "@/lib/docEdits";
 import { fmtDate, KIND_AR } from "@/lib/labels";
 import { useMissingData } from "@/lib/missingData";
 import { useReports } from "@/lib/reports";
-import { useTickets } from "@/lib/support";
+import { isProjectTeam, useTickets } from "@/lib/support";
 import type { Course } from "@/lib/types";
 
 interface Event { id: number; at: string; kind: string; message: string; actor: string }
@@ -36,7 +36,7 @@ export default function ActivityPage() {
   const { requests } = useMissingData(me);
   const { reports } = useReports(me);
   const { proposals } = useDocEdits(me);
-  const { tickets } = useTickets(me.role === "team" ? "all" : "mine", me);
+  const { tickets } = useTickets(isProjectTeam(me) ? "all" : "mine", me);
 
   // Course codes appear in event messages; match them to course pages.
   const codes = useMemo(() => (courses ?? []).filter((c) => c.code && c.code !== "—").map((c) => ({ code: c.code, id: c.id })), [courses]);
@@ -47,9 +47,9 @@ export default function ActivityPage() {
     for (const r of requests ?? []) r.history.forEach((h) => out.push({ id: `md${h.id}`, at: h.at, actor: h.actorName, feature: "استكمال البيانات", action: `${h.action} — طلب #${r.number}`, note: h.note, course: r.course.code, href: `/missing-data?r=${r.id}` }));
     for (const r of reports ?? []) r.history.forEach((h) => out.push({ id: `rep${h.id}`, at: h.at, actor: h.actorName, feature: "تقارير الفجوات", action: `${h.action} — تقرير #${r.number}`, note: h.note, course: r.course.code, href: `/reports?r=${r.id}` }));
     for (const p of proposals ?? []) p.history.forEach((h) => out.push({ id: `ed${h.id}`, at: h.at, actor: h.actorName, feature: "تعديل المستندات", action: `${h.action} — اقتراح #${p.number}`, note: h.note, course: p.course.code, href: `/document-edits?p=${p.id}` }));
-    for (const t of tickets ?? []) t.messages.forEach((m) => out.push({ id: `sp${m.id}`, at: m.at, actor: m.authorName, feature: "الدعم الفني", action: m.author === "system" ? m.body : `رسالة في طلب الدعم #${t.number}`, note: null, course: null, href: me.role === "team" ? "/support" : "/inbox" }));
+    for (const t of tickets ?? []) t.messages.forEach((m) => out.push({ id: `sp${m.id}`, at: m.at, actor: m.authorName, feature: "الدعم الفني", action: m.author === "system" ? m.body : `رسالة في طلب الدعم #${t.number}`, note: null, course: null, href: isProjectTeam(me) ? "/support" : "/inbox" }));
     return out.sort((a, b) => b.at.localeCompare(a.at));
-  }, [requests, reports, proposals, tickets, me.role]);
+  }, [requests, reports, proposals, tickets, me]);
 
   const inRange = (at: string) => (!from || at.slice(0, 10) >= from) && (!to || at.slice(0, 10) <= to);
   const text = q.trim();

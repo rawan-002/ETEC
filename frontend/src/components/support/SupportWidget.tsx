@@ -7,7 +7,7 @@ import { useMe } from "@/components/Shell";
 import { Empty, ErrorNote, Spinner } from "@/components/ui";
 import { fmtDate } from "@/lib/labels";
 import type { AttachmentMeta, Ticket, TicketCategory } from "@/lib/support";
-import { actorFrom, CATEGORY_AR, MAX_BODY, support, unreadForUser, useTickets } from "@/lib/support";
+import { actorFrom, CATEGORY_AR, isProjectTeam, MAX_BODY, support, unreadForUser, useTickets } from "@/lib/support";
 import { AttachmentPicker, DemoNotice, TicketStatusPill, TicketThread } from "./TicketThread";
 
 type View = { name: "new" } | { name: "list" } | { name: "ticket"; id: string };
@@ -80,7 +80,7 @@ export function SupportWidget() {
             )}
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-              {me.role === "team" && (
+              {isProjectTeam(me) && (
                 <Link href="/support" onClick={() => setOpen(false)} className="mb-3 rounded-xl bg-royal-50 px-3 py-2 text-xs font-semibold text-royal hover:underline">
                   أنت في فريق المشروع: افتح صفحة طلبات الدعم الفني للرد على الطلبات ←
                 </Link>
